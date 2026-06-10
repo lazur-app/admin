@@ -62,6 +62,34 @@ export function fetchOverview() {
   return adminFetch<AdminOverview>("/admin/overview");
 }
 
+export type AdminAnalyticsOverview = {
+  dau: number;
+  wau: number;
+  mau: number;
+  top_events_7d: { event_name: string; count: number }[];
+  onboarding_funnel_30d: {
+    signed_up: number;
+    onboarding_completed: number;
+    steps: { step: string; count: number }[];
+    window_days: number;
+  };
+  errors: {
+    total_7d: number;
+    by_version: { app_version: string | null; platform: string | null; count: number }[];
+    recent: {
+      user_id: string;
+      occurred_at: string | null;
+      app_version: string | null;
+      platform: string | null;
+      properties: Record<string, unknown> | null;
+    }[];
+  };
+};
+
+export function fetchAnalyticsOverview() {
+  return adminFetch<AdminAnalyticsOverview>("/admin/analytics/overview");
+}
+
 export function fetchUsers(params?: { search?: string; limit?: number; offset?: number }) {
   const q = new URLSearchParams();
   if (params?.search) q.set("search", params.search);

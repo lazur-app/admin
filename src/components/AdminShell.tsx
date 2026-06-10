@@ -7,6 +7,7 @@ import { logout } from "@/lib/auth";
 
 const nav = [
   { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/analytics", label: "Analytics" },
   { href: "/dashboard/users", label: "Users" },
 ];
 
