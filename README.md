@@ -26,7 +26,7 @@ admin (Next.js) → backend (FastAPI) → PostgreSQL
    UPDATE users SET is_admin = true WHERE email = 'you@example.com';
    ```
 
-   Restart the backend so `is_admin` column is applied (`init_db` runs on startup).
+   Apply schema via `cd backend && alembic upgrade head` (or restart dev API after migration).
 
 4. Run backend (port 8000) and admin:
 
