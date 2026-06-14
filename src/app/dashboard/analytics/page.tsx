@@ -1,87 +1,266 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchAnalyticsOverview,
+  fetchPlatformSummary,
+  fetchTimeseries,
+  triggerBackfill,
+  downloadExport,
   type AdminAnalyticsOverview,
+  type PlatformSummary,
 } from "@/lib/api";
+import {
+  StatCard,
+  PageHeader,
+  ErrorBanner,
+  LoadingState,
+  DataTable,
+  tableHeadClass,
+  tableCellClass,
+} from "@/components/ui";
+import {
+  DateRangePicker,
+  defaultRange,
+  type DateRange,
+} from "@/components/DateRangePicker";
+import {
+  TimeseriesChart,
+  BarChartPanel,
+  FunnelBarChart,
+  HorizontalBarChart,
+  ChartSection,
+} from "@/components/charts";
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
-      <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-white">
-        {typeof value === "number" ? value.toLocaleString() : value}
-      </p>
-    </div>
-  );
-}
+type MetricSeries = Record<string, { date: string; value: number }[]>;
+
+const TIMESERIES_METRICS = [
+  "dau",
+  "sessions",
+  "words",
+  "commands",
+  "signups",
+  "errors",
+  "llm_cost_usd",
+] as const;
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AdminAnalyticsOverview | null>(null);
+  const [summary, setSummary] = useState<PlatformSummary | null>(null);
+  const [series, setSeries] = useState<MetricSeries>({});
+  const [range, setRange] = useState<DateRange>(defaultRange(30));
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+
+  const load = useCallback(async (r: DateRange) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [overview, platformSummary, ...metricResults] = await Promise.all([
+        fetchAnalyticsOverview(),
+        fetchPlatformSummary(r.from, r.to),
+        ...TIMESERIES_METRICS.map((metric) =>
+          fetchTimeseries({ metric, from: r.from, to: r.to })
+        ),
+      ]);
+      setData(overview);
+      setSummary(platformSummary);
+      const next: MetricSeries = {};
+      TIMESERIES_METRICS.forEach((metric, i) => {
+        next[metric] = metricResults[i].series;
+      });
+      setSeries(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetchAnalyticsOverview()
-      .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, []);
+    load(range);
+  }, [range, load]);
+
+  const funnelSteps = useMemo(() => {
+    if (!data) return [];
+    const f = data.onboarding_funnel_30d;
+    const steps = [
+      { label: "Signed up", value: f.signed_up },
+      ...f.steps.map((s) => ({ label: s.step, value: s.count })),
+      { label: "Onboarding completed", value: f.onboarding_completed },
+    ];
+    return steps.filter((s) => s.value > 0);
+  }, [data]);
+
+  const topEventsChart = useMemo(
+    () =>
+      (data?.top_events_7d ?? []).map((e) => ({
+        name: e.event_name,
+        value: e.count,
+      })),
+    [data]
+  );
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-white">Product analytics</h1>
-      <p className="mt-1 text-sm text-zinc-400">
-        DAU/WAU/MAU from <code className="text-zinc-300">users.last_active_at</code>;
-        events from <code className="text-zinc-300">analytics_events</code> (last 7–30 days).
-      </p>
+      <PageHeader
+        title="Product analytics"
+        description="Engagement, funnels, errors, and platform trends."
+      />
 
-      {error && (
-        <p className="mt-6 rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
-          {error}
-        </p>
+      <DateRangePicker value={range} onChange={setRange} />
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            downloadExport(
+              `/admin/export/timeseries?metric=words&from=${range.from}&to=${range.to}`
+            )
+          }
+          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+        >
+          Export words CSV
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setBackfillMsg("Backfilling…");
+            triggerBackfill(range.from, range.to)
+              .then((r) =>
+                setBackfillMsg(
+                  `Backfilled ${r.days_processed} day(s). Reloading charts…`
+                )
+              )
+              .then(() => load(range))
+              .catch((e) =>
+                setBackfillMsg(e instanceof Error ? e.message : "Backfill failed")
+              );
+          }}
+          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+        >
+          Backfill rollups for range
+        </button>
+      </div>
+      {backfillMsg && (
+        <p className="mt-2 text-xs text-zinc-500">{backfillMsg}</p>
       )}
 
-      {!data && !error && (
-        <p className="mt-8 text-sm text-zinc-500">Loading analytics…</p>
-      )}
+      {error && <ErrorBanner message={error} />}
+      {loading && !data && <LoadingState className="mt-8" />}
 
-      {data && (
+      {data && summary && (
         <div className="mt-8 space-y-10">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             <StatCard label="DAU (24h)" value={data.dau} />
             <StatCard label="WAU (7d)" value={data.wau} />
             <StatCard label="MAU (30d)" value={data.mau} />
+            <StatCard
+              label="Avg DAU (range)"
+              value={summary.avg_dau}
+              sub={`Peak ${summary.peak_dau}`}
+            />
+            <StatCard
+              label="Sessions (range)"
+              value={summary.totals.sessions.toLocaleString()}
+            />
+            <StatCard
+              label="Error rate"
+              value={
+                summary.error_rate_pct != null
+                  ? `${summary.error_rate_pct}%`
+                  : "—"
+              }
+              sub={`${data.errors.total_7d} errors / 7d`}
+            />
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-2">
+            <ChartSection title="Daily active users">
+              <TimeseriesChart data={series.dau} label="DAU" />
+            </ChartSection>
+            <ChartSection title="Dictation sessions per day">
+              <BarChartPanel data={series.sessions} label="Sessions" />
+            </ChartSection>
+            <ChartSection title="Words dictated per day">
+              <TimeseriesChart data={series.words} label="Words" />
+            </ChartSection>
+            <ChartSection title="Command mode usage per day">
+              <BarChartPanel data={series.commands} label="Commands" />
+            </ChartSection>
+            <ChartSection title="New signups per day">
+              <BarChartPanel data={series.signups} label="Signups" />
+            </ChartSection>
+            <ChartSection title="Client errors per day">
+              <TimeseriesChart data={series.errors} label="Errors" />
+            </ChartSection>
+          </div>
+
+          <ChartSection title="LLM infrastructure cost per day (USD)">
+            <TimeseriesChart data={series.llm_cost_usd} label="USD" />
+          </ChartSection>
+
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div>
+              <ChartSection title="Onboarding funnel (30 days)">
+                {funnelSteps.length > 0 ? (
+                  <FunnelBarChart steps={funnelSteps} />
+                ) : (
+                  <p className="text-sm text-zinc-500">No funnel data yet.</p>
+                )}
+              </ChartSection>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <StatCard
+                  label="Signed up"
+                  value={data.onboarding_funnel_30d.signed_up}
+                />
+                <StatCard
+                  label="Completed onboarding"
+                  value={data.onboarding_funnel_30d.onboarding_completed}
+                />
+              </div>
+            </div>
+            <ChartSection title="Top events (7 days)">
+              {topEventsChart.length > 0 ? (
+                <HorizontalBarChart data={topEventsChart} />
+              ) : (
+                <p className="text-sm text-zinc-500">No events yet.</p>
+              )}
+            </ChartSection>
           </div>
 
           <section>
-            <h2 className="text-lg font-medium text-white">Top events (7 days)</h2>
-            <div className="mt-3 overflow-hidden rounded-xl border border-zinc-800">
+            <h2 className="mb-3 text-lg font-medium text-zinc-900">
+              Errors by app version (7 days)
+            </h2>
+            <DataTable>
               <table className="w-full text-left text-sm">
-                <thead className="bg-zinc-900/80 text-xs uppercase tracking-wider text-zinc-500">
+                <thead className={tableHeadClass}>
                   <tr>
-                    <th className="px-4 py-3">Event</th>
+                    <th className="px-4 py-3">Version</th>
+                    <th className="px-4 py-3">Platform</th>
                     <th className="px-4 py-3 text-right">Count</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.top_events_7d.length === 0 ? (
+                  {data.errors.by_version.length === 0 ? (
                     <tr>
-                      <td colSpan={2} className="px-4 py-6 text-zinc-500">
-                        No events yet — deploy desktop app + backend batch ingest.
+                      <td
+                        colSpan={3}
+                        className={`${tableCellClass} text-zinc-500`}
+                      >
+                        No errors recorded.
                       </td>
                     </tr>
                   ) : (
-                    data.top_events_7d.map((row) => (
-                      <tr
-                        key={row.event_name}
-                        className="border-t border-zinc-800/80 text-zinc-300"
-                      >
-                        <td className="px-4 py-2.5 font-mono text-xs">
-                          {row.event_name}
+                    data.errors.by_version.map((row, i) => (
+                      <tr key={i} className="border-t border-zinc-100">
+                        <td className={`${tableCellClass} font-mono text-xs`}>
+                          {row.app_version ?? "—"}
                         </td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className={tableCellClass}>{row.platform ?? "—"}</td>
+                        <td className={`${tableCellClass} text-right`}>
                           {row.count.toLocaleString()}
                         </td>
                       </tr>
@@ -89,115 +268,31 @@ export default function AnalyticsPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </DataTable>
           </section>
 
           <section>
-            <h2 className="text-lg font-medium text-white">
-              Onboarding funnel (30 days)
+            <h2 className="mb-3 text-lg font-medium text-zinc-900">
+              Range totals
             </h2>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="Signed up" value={data.onboarding_funnel_30d.signed_up} />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
-                label="Onboarding completed"
-                value={data.onboarding_funnel_30d.onboarding_completed}
+                label="Words (range)"
+                value={summary.totals.words.toLocaleString()}
+              />
+              <StatCard
+                label="Commands (range)"
+                value={summary.totals.commands.toLocaleString()}
+              />
+              <StatCard
+                label="Signups (range)"
+                value={summary.totals.signups.toLocaleString()}
+              />
+              <StatCard
+                label="LLM cost (range)"
+                value={`$${summary.totals.llm_cost_usd.toFixed(4)}`}
               />
             </div>
-            {data.onboarding_funnel_30d.steps.length > 0 && (
-              <div className="mt-4 overflow-hidden rounded-xl border border-zinc-800">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-zinc-900/80 text-xs uppercase tracking-wider text-zinc-500">
-                    <tr>
-                      <th className="px-4 py-3">Step viewed</th>
-                      <th className="px-4 py-3 text-right">Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.onboarding_funnel_30d.steps.map((row) => (
-                      <tr
-                        key={row.step}
-                        className="border-t border-zinc-800/80 text-zinc-300"
-                      >
-                        <td className="px-4 py-2.5">{row.step}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          {row.count.toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          <section>
-            <h2 className="text-lg font-medium text-white">Errors (7 days)</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Client <code className="text-zinc-400">error_occurred</code> events —{" "}
-              {data.errors.total_7d.toLocaleString()} total
-            </p>
-            {data.errors.by_version.length > 0 && (
-              <div className="mt-3 overflow-hidden rounded-xl border border-zinc-800">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-zinc-900/80 text-xs uppercase tracking-wider text-zinc-500">
-                    <tr>
-                      <th className="px-4 py-3">Version</th>
-                      <th className="px-4 py-3">Platform</th>
-                      <th className="px-4 py-3 text-right">Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.errors.by_version.map((row, i) => (
-                      <tr
-                        key={`${row.app_version}-${row.platform}-${i}`}
-                        className="border-t border-zinc-800/80 text-zinc-300"
-                      >
-                        <td className="px-4 py-2.5 font-mono text-xs">
-                          {row.app_version ?? "—"}
-                        </td>
-                        <td className="px-4 py-2.5">{row.platform ?? "—"}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          {row.count.toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {data.errors.recent.length > 0 && (
-              <div className="mt-4 overflow-hidden rounded-xl border border-zinc-800">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-zinc-900/80 text-xs uppercase tracking-wider text-zinc-500">
-                    <tr>
-                      <th className="px-4 py-3">When</th>
-                      <th className="px-4 py-3">Message</th>
-                      <th className="px-4 py-3">Version</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.errors.recent.map((row, i) => (
-                      <tr
-                        key={`${row.occurred_at}-${i}`}
-                        className="border-t border-zinc-800/80 text-zinc-300"
-                      >
-                        <td className="px-4 py-2.5 whitespace-nowrap text-xs text-zinc-500">
-                          {row.occurred_at
-                            ? new Date(row.occurred_at).toLocaleString()
-                            : "—"}
-                        </td>
-                        <td className="max-w-md truncate px-4 py-2.5 text-xs">
-                          {String(row.properties?.message ?? "—")}
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-xs">
-                          {row.app_version ?? "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </section>
         </div>
       )}

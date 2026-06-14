@@ -39,12 +39,12 @@ function CallbackContent() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-        <div className="max-w-md rounded-2xl border border-red-900/50 bg-zinc-900 p-8 text-center">
-          <p className="text-red-300">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#fafaf9] px-4">
+        <div className="max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-red-700">{error}</p>
           <a
             href="/login"
-            className="mt-6 inline-block text-sm text-violet-400 hover:text-violet-300"
+            className="mt-6 inline-block text-sm text-zinc-600 hover:text-zinc-900"
           >
             Back to login
           </a>
@@ -54,8 +54,8 @@ function CallbackContent() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-      <p className="text-sm text-zinc-400">Signing in…</p>
+    <div className="flex min-h-screen items-center justify-center bg-[#fafaf9]">
+      <p className="text-sm text-zinc-500">Signing in…</p>
     </div>
   );
 }
@@ -64,8 +64,8 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-          <p className="text-sm text-zinc-400">Loading…</p>
+        <div className="flex min-h-screen items-center justify-center bg-[#fafaf9]">
+          <p className="text-sm text-zinc-500">Loading…</p>
         </div>
       }
     >

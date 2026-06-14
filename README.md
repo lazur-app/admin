@@ -47,15 +47,15 @@ admin (Next.js) → backend (FastAPI) → PostgreSQL
 | GET | `/admin/me` | Current admin profile |
 | GET | `/admin/overview` | Platform metrics |
 | GET | `/admin/users` | User list (`?search=`) |
+| GET | `/admin/users/{id}` | User detail |
+| GET | `/admin/analytics/timeseries` | Platform charts (`?metric=&from=&to=`) |
+| GET | `/admin/analytics/compare` | Multi-user / cohort compare |
+| GET | `/admin/analytics/users/{id}/hourly` | Hourly activity heatmap |
 
-OAuth: `/auth/login/google?source=admin` → redirects to `ADMIN_URL/auth/callback`.
+See [docs/admin-analytics-dashboard.html](../docs/admin-analytics-dashboard.html) for the full spec.
 
-## Deploy
+Run migration before first use:
 
-- Host at `admin.lazur.app` (e.g. Vercel)
-- Set `NEXT_PUBLIC_API_URL=https://api.lazur.app`
-- Set backend `ADMIN_URL=https://admin.lazur.app`
-- Add admin origin to CORS in `backend/app/main.py`
-
-See [backend/ADMIN_DASHBOARD_SPEC.md](../backend/ADMIN_DASHBOARD_SPEC.md) for the full analytics roadmap.
-# admin
+```bash
+cd backend && alembic upgrade head
+```
