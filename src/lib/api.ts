@@ -76,6 +76,17 @@ export type AdminUserDetail = AdminUserRow & {
   dictation_sessions: number;
   last_active_at: string | null;
   trial_status: string;
+  billing_source: string | null;
+  cancel_at_period_end: boolean;
+  comp_reason: string | null;
+  subscription_status: string | null;
+};
+
+export type AdminPlanActionResult = {
+  status: string;
+  plan: string;
+  billing_source: string | null;
+  comp_reason: string | null;
 };
 
 export type TimeseriesResponse = {
@@ -223,6 +234,21 @@ export function fetchUsers(params?: { search?: string; limit?: number; offset?: 
 
 export function fetchUserDetail(id: string) {
   return adminFetch<AdminUserDetail>(`/admin/users/${id}`);
+}
+
+export function adminUserPlanAction(
+  userId: string,
+  body: {
+    action: "grant_comp" | "revoke_comp" | "extend_comp";
+    plan?: string;
+    reason?: string;
+    expires_at?: string;
+  },
+) {
+  return adminFetch<AdminPlanActionResult>(`/admin/users/${userId}/plan`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function fetchUserActivity(params: {
