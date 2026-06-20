@@ -18,6 +18,7 @@ import {
   type DateRange,
 } from "@/components/DateRangePicker";
 import { TimeseriesChart, HourlyBarChart, PieChartPanel } from "@/components/charts";
+import { UserFeedbackSection } from "@/components/UserFeedbackSection";
 
 export default function UserDetailPage() {
   const params = useParams();
@@ -233,6 +234,8 @@ export default function UserDetailPage() {
           <p className="mt-3 text-sm text-zinc-600">{planMessage}</p>
         )}
       </section>
+
+      <UserFeedbackSection userId={userId} />
 
       <div className="mt-8">
         <DateRangePicker value={range} onChange={setRange} />

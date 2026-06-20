@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export function StatCard({
   label,
   value,
@@ -5,7 +7,7 @@ export function StatCard({
 }: {
   label: string;
   value: string | number;
-  sub?: string;
+  sub?: ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">

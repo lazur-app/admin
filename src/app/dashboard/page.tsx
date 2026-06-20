@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchOverview, fetchTimeseries } from "@/lib/api";
 import type { AdminOverview } from "@/lib/api";
@@ -78,6 +79,24 @@ export default function DashboardOverviewPage() {
             <StatCard
               label="LLM cost (MTD)"
               value={`$${data.llm_cost_mtd_usd.toFixed(4)}`}
+            />
+            <StatCard
+              label="Open issues"
+              value={data.open_issues_count ?? 0}
+              sub={
+                <Link href="/dashboard/feedback?kind=issue" className="text-violet-700 hover:underline">
+                  View in Feedback
+                </Link>
+              }
+            />
+            <StatCard
+              label="Open feedback"
+              value={data.open_feedback_count ?? 0}
+              sub={
+                <Link href="/dashboard/feedback?kind=feedback" className="text-violet-700 hover:underline">
+                  View in Feedback
+                </Link>
+              }
             />
           </div>
 

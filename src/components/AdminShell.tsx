@@ -10,6 +10,7 @@ const nav = [
   { href: "/dashboard/analytics", label: "Analytics" },
   { href: "/dashboard/cost", label: "Cost" },
   { href: "/dashboard/users", label: "Users" },
+  { href: "/dashboard/feedback", label: "Feedback" },
   { href: "/dashboard/compare", label: "Compare" },
   { href: "/dashboard/ops", label: "Ops" },
 ];

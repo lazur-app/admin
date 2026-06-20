@@ -47,6 +47,8 @@ export type AdminOverview = {
   mrr_usd: number;
   gross_margin_mtd_usd: number;
   gross_margin_pct: number | null;
+  open_feedback_count: number;
+  open_issues_count: number;
 };
 
 export type AdminUserRow = {
@@ -317,5 +319,84 @@ export async function triggerBackfill(from: string, to?: string) {
   return adminFetch<{ days_processed: number }>(
     `/admin/analytics/backfill?from=${from}${to ? `&to=${to}` : ""}`,
     { method: "POST" }
+  );
+}
+
+export type AdminFeedbackRow = {
+  id: string;
+  user_id: string;
+  user_email: string;
+  user_name: string | null;
+  kind: "feedback" | "issue";
+  category: string | null;
+  message: string;
+  attachment_count: number;
+  app_version: string | null;
+  platform: string | null;
+  status: "open" | "read" | "resolved" | "archived";
+  admin_notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AdminFeedbackDetail = AdminFeedbackRow & {
+  attachments: {
+    filename: string;
+    content_type: string;
+    size_bytes?: number;
+    data_base64: string;
+  }[];
+};
+
+export type AdminFeedbackResponse = {
+  total: number;
+  limit: number;
+  offset: number;
+  items: AdminFeedbackRow[];
+};
+
+export type AdminFeedbackSummary = {
+  total: number;
+  open: number;
+  open_feedback: number;
+  open_issues: number;
+};
+
+export function fetchFeedbackSummary() {
+  return adminFetch<AdminFeedbackSummary>("/admin/feedback/summary");
+}
+
+export function fetchFeedback(params?: {
+  kind?: "feedback" | "issue";
+  status?: "open" | "read" | "resolved" | "archived";
+  user_id?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return adminFetch<AdminFeedbackResponse>(
+    `/admin/feedback${qs({
+      kind: params?.kind,
+      status: params?.status,
+      user_id: params?.user_id,
+      limit: params?.limit,
+      offset: params?.offset,
+    })}`
+  );
+}
+
+export function fetchFeedbackDetail(id: string) {
+  return adminFetch<AdminFeedbackDetail>(`/admin/feedback/${id}`);
+}
+
+export function updateFeedback(
+  id: string,
+  body: { status?: AdminFeedbackRow["status"]; admin_notes?: string | null }
+) {
+  return adminFetch<{ id: string; status: string; admin_notes: string | null }>(
+    `/admin/feedback/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }
   );
 }
