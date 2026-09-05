@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminShell } from "@/components/AdminShell";
+import { QueryProvider } from "@/lib/query";
 import {
   fetchAdminMe,
   hasValidSessionToken,
@@ -51,5 +52,9 @@ export default function DashboardLayout({
     );
   }
 
-  return <AdminShell profile={profile}>{children}</AdminShell>;
+  return (
+    <QueryProvider>
+      <AdminShell profile={profile}>{children}</AdminShell>
+    </QueryProvider>
+  );
 }

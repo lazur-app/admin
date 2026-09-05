@@ -1,14 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   fetchAnalyticsOverview,
-  fetchPlatformSummary,
-  fetchTimeseries,
-  triggerBackfill,
+  fetchDashboard,
   downloadExport,
   type AdminAnalyticsOverview,
-  type PlatformSummary,
 } from "@/lib/api";
 import {
   StatCard,
@@ -31,56 +29,48 @@ import {
   HorizontalBarChart,
   ChartSection,
 } from "@/components/charts";
-
-type MetricSeries = Record<string, { date: string; value: number }[]>;
-
-const TIMESERIES_METRICS = [
-  "dau",
-  "sessions",
-  "words",
-  "commands",
-  "signups",
-  "errors",
-  "llm_cost_usd",
-] as const;
+import {
+  insightVsAverage,
+  prefetchRange,
+  rangeInside,
+  shareInsight,
+  sliceDashboard,
+} from "@/lib/dashboard";
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<AdminAnalyticsOverview | null>(null);
-  const [summary, setSummary] = useState<PlatformSummary | null>(null);
-  const [series, setSeries] = useState<MetricSeries>({});
   const [range, setRange] = useState<DateRange>(defaultRange(30));
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const window = prefetchRange();
+  const canSlice = rangeInside(window, range);
 
-  const load = useCallback(async (r: DateRange) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [overview, platformSummary, ...metricResults] = await Promise.all([
-        fetchAnalyticsOverview(),
-        fetchPlatformSummary(r.from, r.to),
-        ...TIMESERIES_METRICS.map((metric) =>
-          fetchTimeseries({ metric, from: r.from, to: r.to })
-        ),
-      ]);
-      setData(overview);
-      setSummary(platformSummary);
-      const next: MetricSeries = {};
-      TIMESERIES_METRICS.forEach((metric, i) => {
-        next[metric] = metricResults[i].series;
-      });
-      setSeries(next);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const dashboardQuery = useQuery({
+    queryKey: ["admin-dashboard", canSlice ? window : range],
+    queryFn: () =>
+      fetchDashboard(
+        canSlice ? window.from : range.from,
+        canSlice ? window.to : range.to
+      ),
+    placeholderData: keepPreviousData,
+  });
 
-  useEffect(() => {
-    load(range);
-  }, [range, load]);
+  const overviewQuery = useQuery({
+    queryKey: ["admin-analytics-overview"],
+    queryFn: fetchAnalyticsOverview,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
+
+  const view = useMemo(() => {
+    if (!dashboardQuery.data) return null;
+    return canSlice ? sliceDashboard(dashboardQuery.data, range) : dashboardQuery.data;
+  }, [dashboardQuery.data, canSlice, range]);
+
+  const data: AdminAnalyticsOverview | undefined = overviewQuery.data;
+  const error =
+    dashboardQuery.error instanceof Error
+      ? dashboardQuery.error.message
+      : overviewQuery.error instanceof Error
+        ? overviewQuery.error.message
+        : null;
 
   const funnelSteps = useMemo(() => {
     if (!data) return [];
@@ -107,70 +97,47 @@ export default function AnalyticsPage() {
       <PageHeader
         title="Product analytics"
         description="Engagement, funnels, errors, and platform trends."
+        actions={
+          <button
+            type="button"
+            onClick={() =>
+              downloadExport(
+                `/admin/export/timeseries?metric=words&from=${range.from}&to=${range.to}`
+              )
+            }
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
+          >
+            Export words CSV
+          </button>
+        }
       />
 
-      <DateRangePicker value={range} onChange={setRange} />
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() =>
-            downloadExport(
-              `/admin/export/timeseries?metric=words&from=${range.from}&to=${range.to}`
-            )
-          }
-          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
-        >
-          Export words CSV
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setBackfillMsg("Backfilling…");
-            triggerBackfill(range.from, range.to)
-              .then((r) =>
-                setBackfillMsg(
-                  `Backfilled ${r.days_processed} day(s). Reloading charts…`
-                )
-              )
-              .then(() => load(range))
-              .catch((e) =>
-                setBackfillMsg(e instanceof Error ? e.message : "Backfill failed")
-              );
-          }}
-          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
-        >
-          Backfill rollups for range
-        </button>
+      <div className="sticky top-0 z-10 mb-6 border-b border-white/5 bg-zinc-950/80 py-3 backdrop-blur">
+        <DateRangePicker value={range} onChange={setRange} />
       </div>
-      {backfillMsg && (
-        <p className="mt-2 text-xs text-zinc-500">{backfillMsg}</p>
-      )}
 
       {error && <ErrorBanner message={error} />}
-      {loading && !data && <LoadingState className="mt-8" />}
+      {!view && !error && <LoadingState className="mt-8" />}
 
-      {data && summary && (
-        <div className="mt-8 space-y-10">
+      {view && data && (
+        <div className="space-y-10">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             <StatCard label="DAU (24h)" value={data.dau} />
             <StatCard label="WAU (7d)" value={data.wau} />
             <StatCard label="MAU (30d)" value={data.mau} />
             <StatCard
               label="Avg DAU (range)"
-              value={summary.avg_dau}
-              sub={`Peak ${summary.peak_dau}`}
+              value={view.avg_dau}
+              sub={`Peak ${view.peak_dau}`}
             />
             <StatCard
               label="Sessions (range)"
-              value={summary.totals.sessions.toLocaleString()}
+              value={(view.totals.sessions ?? 0).toLocaleString()}
             />
             <StatCard
               label="Error rate"
               value={
-                summary.error_rate_pct != null
-                  ? `${summary.error_rate_pct}%`
-                  : "—"
+                view.error_rate_pct != null ? `${view.error_rate_pct}%` : "-"
               }
               sub={`${data.errors.total_7d} errors / 7d`}
             />
@@ -178,27 +145,43 @@ export default function AnalyticsPage() {
 
           <div className="grid gap-8 lg:grid-cols-2">
             <ChartSection title="Daily active users">
-              <TimeseriesChart data={series.dau} label="DAU" />
+              <p className="mb-2 text-xs text-zinc-500">
+                {insightVsAverage(view.series.dau, "DAU")}
+              </p>
+              <TimeseriesChart data={view.series.dau} label="DAU" />
             </ChartSection>
             <ChartSection title="Dictation sessions per day">
-              <BarChartPanel data={series.sessions} label="Sessions" />
+              <p className="mb-2 text-xs text-zinc-500">
+                {insightVsAverage(view.series.sessions, "Sessions")}
+              </p>
+              <BarChartPanel data={view.series.sessions ?? []} label="Sessions" />
             </ChartSection>
             <ChartSection title="Words dictated per day">
-              <TimeseriesChart data={series.words} label="Words" />
+              <p className="mb-2 text-xs text-zinc-500">
+                {insightVsAverage(view.series.words, "Words")}
+              </p>
+              <TimeseriesChart data={view.series.words} label="Words" />
             </ChartSection>
             <ChartSection title="Command mode usage per day">
-              <BarChartPanel data={series.commands} label="Commands" />
+              <p className="mb-2 text-xs text-zinc-500">
+                {shareInsight(
+                  view.totals.commands ?? 0,
+                  view.totals.sessions ?? 0,
+                  "Commands"
+                )}
+              </p>
+              <BarChartPanel data={view.series.commands ?? []} label="Commands" />
             </ChartSection>
             <ChartSection title="New signups per day">
-              <BarChartPanel data={series.signups} label="Signups" />
+              <BarChartPanel data={view.series.signups ?? []} label="Signups" />
             </ChartSection>
             <ChartSection title="Client errors per day">
-              <TimeseriesChart data={series.errors} label="Errors" />
+              <TimeseriesChart data={view.series.errors} label="Errors" />
             </ChartSection>
           </div>
 
           <ChartSection title="LLM infrastructure cost per day (USD)">
-            <TimeseriesChart data={series.llm_cost_usd} label="USD" />
+            <TimeseriesChart data={view.series.llm_cost_usd} label="USD" />
           </ChartSection>
 
           <div className="grid gap-8 lg:grid-cols-2">
@@ -231,7 +214,7 @@ export default function AnalyticsPage() {
           </div>
 
           <section>
-            <h2 className="mb-3 text-lg font-medium text-zinc-900">
+            <h2 className="mb-3 text-lg font-medium text-zinc-50">
               Errors by app version (7 days)
             </h2>
             <DataTable>
@@ -255,11 +238,11 @@ export default function AnalyticsPage() {
                     </tr>
                   ) : (
                     data.errors.by_version.map((row, i) => (
-                      <tr key={i} className="border-t border-zinc-100">
+                      <tr key={i} className="border-t border-white/5">
                         <td className={`${tableCellClass} font-mono text-xs`}>
-                          {row.app_version ?? "—"}
+                          {row.app_version ?? "-"}
                         </td>
-                        <td className={tableCellClass}>{row.platform ?? "—"}</td>
+                        <td className={tableCellClass}>{row.platform ?? "-"}</td>
                         <td className={`${tableCellClass} text-right`}>
                           {row.count.toLocaleString()}
                         </td>
@@ -272,25 +255,23 @@ export default function AnalyticsPage() {
           </section>
 
           <section>
-            <h2 className="mb-3 text-lg font-medium text-zinc-900">
-              Range totals
-            </h2>
+            <h2 className="mb-3 text-lg font-medium text-zinc-50">Range totals</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
                 label="Words (range)"
-                value={summary.totals.words.toLocaleString()}
+                value={(view.totals.words ?? 0).toLocaleString()}
               />
               <StatCard
                 label="Commands (range)"
-                value={summary.totals.commands.toLocaleString()}
+                value={(view.totals.commands ?? 0).toLocaleString()}
               />
               <StatCard
                 label="Signups (range)"
-                value={summary.totals.signups.toLocaleString()}
+                value={(view.totals.signups ?? 0).toLocaleString()}
               />
               <StatCard
                 label="LLM cost (range)"
-                value={`$${summary.totals.llm_cost_usd.toFixed(4)}`}
+                value={`$${(view.totals.llm_cost_usd ?? 0).toFixed(4)}`}
               />
             </div>
           </section>

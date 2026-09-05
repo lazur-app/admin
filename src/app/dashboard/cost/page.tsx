@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchCostOverview, fetchTimeseries, type CostOverview } from "@/lib/api";
+import { useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { fetchCostOverview, fetchDashboard } from "@/lib/api";
 import {
   PageHeader,
   StatCard,
@@ -18,27 +19,41 @@ import {
   type DateRange,
 } from "@/components/DateRangePicker";
 import { BarChartPanel, HorizontalBarChart, ChartSection } from "@/components/charts";
+import { prefetchRange, rangeInside, sliceDashboard } from "@/lib/dashboard";
 
 export default function CostPage() {
-  const [data, setData] = useState<CostOverview | null>(null);
-  const [costSeries, setCostSeries] = useState<{ date: string; value: number }[]>(
-    []
-  );
   const [range, setRange] = useState<DateRange>(defaultRange(30));
-  const [error, setError] = useState<string | null>(null);
+  const window = prefetchRange();
+  const canSlice = rangeInside(window, range);
 
-  useEffect(() => {
-    setError(null);
-    Promise.all([
-      fetchCostOverview(),
-      fetchTimeseries({ metric: "llm_cost_usd", ...range }),
-    ])
-      .then(([overview, ts]) => {
-        setData(overview);
-        setCostSeries(ts.series);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, [range]);
+  const costQuery = useQuery({
+    queryKey: ["admin-cost"],
+    queryFn: fetchCostOverview,
+    staleTime: 30_000,
+  });
+
+  const dashboardQuery = useQuery({
+    queryKey: ["admin-dashboard", canSlice ? window : range],
+    queryFn: () =>
+      fetchDashboard(
+        canSlice ? window.from : range.from,
+        canSlice ? window.to : range.to
+      ),
+    placeholderData: keepPreviousData,
+  });
+
+  const view = useMemo(() => {
+    if (!dashboardQuery.data) return null;
+    return canSlice ? sliceDashboard(dashboardQuery.data, range) : dashboardQuery.data;
+  }, [dashboardQuery.data, canSlice, range]);
+
+  const data = costQuery.data;
+  const error =
+    costQuery.error instanceof Error
+      ? costQuery.error.message
+      : dashboardQuery.error instanceof Error
+        ? dashboardQuery.error.message
+        : null;
 
   if (error && !data) return <ErrorBanner message={error} />;
   if (!data) return <LoadingState />;
@@ -55,9 +70,11 @@ export default function CostPage() {
         description="MRR, gross margin, token spend, and waste analytics."
       />
 
-      <DateRangePicker value={range} onChange={setRange} />
+      <div className="sticky top-0 z-10 mb-6 border-b border-white/5 bg-zinc-950/80 py-3 backdrop-blur">
+        <DateRangePicker value={range} onChange={setRange} />
+      </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="MRR" value={`$${data.mrr_usd.toFixed(2)}`} />
         <StatCard
           label="LLM cost (MTD)"
@@ -77,19 +94,19 @@ export default function CostPage() {
           value={
             data.waste_mtd.waste_rate_pct != null
               ? `${data.waste_mtd.waste_rate_pct}%`
-              : "—"
+              : "-"
           }
           sub={`$${data.waste_mtd.wasted_cost_usd.toFixed(4)} unfinalized`}
         />
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="LLM latency p50"
           value={
             data.latency_mtd.p50_ms != null
               ? `${data.latency_mtd.p50_ms} ms`
-              : "—"
+              : "-"
           }
         />
         <StatCard
@@ -97,7 +114,7 @@ export default function CostPage() {
           value={
             data.latency_mtd.p95_ms != null
               ? `${data.latency_mtd.p95_ms} ms`
-              : "—"
+              : "-"
           }
           sub={`${data.latency_mtd.sample_count} samples`}
         />
@@ -106,11 +123,16 @@ export default function CostPage() {
           value={data.waste_mtd.unfinalized_calls}
           sub={`of ${data.waste_mtd.command_calls_mtd} command calls MTD`}
         />
+        <StatCard
+          label="Unfinalized agents"
+          value={data.waste_mtd.agent?.unfinalized_calls ?? 0}
+          sub={`of ${data.waste_mtd.agent?.calls_mtd ?? 0} agent calls MTD`}
+        />
       </div>
 
       <div className="mt-10 space-y-10">
         <ChartSection title="Daily LLM cost (USD)">
-          <BarChartPanel data={costSeries} label="USD" />
+          <BarChartPanel data={view?.series.llm_cost_usd ?? []} label="USD" />
         </ChartSection>
 
         <div className="grid gap-8 lg:grid-cols-2">
@@ -146,11 +168,11 @@ export default function CostPage() {
                     </tr>
                   ) : (
                     data.top_users_mtd.map((u) => (
-                      <tr key={u.user_id} className="border-t border-zinc-100">
+                      <tr key={u.user_id} className="border-t border-white/5">
                         <td className={tableCellClass}>
                           <Link
                             href={`/dashboard/users/${u.user_id}`}
-                            className="text-zinc-900 hover:underline"
+                            className="text-zinc-100 hover:underline"
                           >
                             {u.email}
                           </Link>
@@ -182,7 +204,7 @@ export default function CostPage() {
               </thead>
               <tbody>
                 {data.by_feature_mtd.map((f) => (
-                  <tr key={f.feature} className="border-t border-zinc-100">
+                  <tr key={f.feature} className="border-t border-white/5">
                     <td className={`${tableCellClass} font-mono text-xs`}>
                       {f.feature}
                     </td>

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchWebhookLog, type WebhookLogResponse } from "@/lib/api";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchWebhookLog, triggerBackfill } from "@/lib/api";
+import { defaultRange } from "@/components/DateRangePicker";
 import {
   PageHeader,
   ErrorBanner,
@@ -12,14 +14,14 @@ import {
 } from "@/components/ui";
 
 export default function OpsPage() {
-  const [data, setData] = useState<WebhookLogResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const webhooks = useQuery({
+    queryKey: ["admin-webhooks"],
+    queryFn: () => fetchWebhookLog({ limit: 100 }),
+  });
 
-  useEffect(() => {
-    fetchWebhookLog({ limit: 100 })
-      .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, []);
+  const data = webhooks.data;
+  const error = webhooks.error instanceof Error ? webhooks.error.message : null;
 
   if (error && !data) return <ErrorBanner message={error} />;
   if (!data) return <LoadingState />;
@@ -27,9 +29,34 @@ export default function OpsPage() {
   return (
     <div>
       <PageHeader
-        title="Billing ops"
-        description="Webhook delivery log from Polar and other billing providers."
+        title="Ops"
+        description="Webhook delivery and analytics rollup backfill."
       />
+
+      <section className="mb-10 rounded-xl border border-white/10 bg-zinc-900 p-5">
+        <h2 className="text-sm font-semibold text-zinc-100">Analytics backfill</h2>
+        <p className="mt-1 text-xs text-zinc-500">
+          Rebuild platform daily rollups for the last 90 days. Use after a deploy or gap.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            const range = defaultRange(90);
+            setBackfillMsg("Backfilling…");
+            triggerBackfill(range.from, range.to)
+              .then((r) =>
+                setBackfillMsg(`Backfilled ${r.days_processed} day(s).`)
+              )
+              .catch((e) =>
+                setBackfillMsg(e instanceof Error ? e.message : "Backfill failed")
+              );
+          }}
+          className="mt-4 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+        >
+          Backfill last 90 days
+        </button>
+        {backfillMsg && <p className="mt-2 text-xs text-zinc-500">{backfillMsg}</p>}
+      </section>
 
       <p className="mb-6 text-sm text-zinc-500">
         {data.total.toLocaleString()} webhook events total · showing latest{" "}
@@ -56,11 +83,11 @@ export default function OpsPage() {
               </tr>
             ) : (
               data.items.map((e) => (
-                <tr key={e.id} className="border-t border-zinc-100">
+                <tr key={e.id} className="border-t border-white/5">
                   <td className={`${tableCellClass} whitespace-nowrap text-xs text-zinc-500`}>
                     {e.created_at
                       ? new Date(e.created_at).toLocaleString()
-                      : "—"}
+                      : "-"}
                   </td>
                   <td className={tableCellClass}>{e.provider}</td>
                   <td className={`${tableCellClass} font-mono text-xs`}>
@@ -68,11 +95,11 @@ export default function OpsPage() {
                   </td>
                   <td className={tableCellClass}>
                     {e.error ? (
-                      <span className="text-red-600" title={e.error}>
+                      <span className="text-red-300" title={e.error}>
                         Error
                       </span>
                     ) : e.processed_at ? (
-                      <span className="text-emerald-700">Processed</span>
+                      <span className="text-emerald-300">Processed</span>
                     ) : (
                       <span className="text-zinc-500">Pending</span>
                     )}

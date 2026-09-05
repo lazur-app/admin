@@ -1,64 +1,81 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { fetchOverview, fetchTimeseries } from "@/lib/api";
-import type { AdminOverview } from "@/lib/api";
+import { useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { fetchOverview, fetchDashboard, downloadExport } from "@/lib/api";
 import { StatCard, PageHeader, ErrorBanner, LoadingState } from "@/components/ui";
 import { TimeseriesChart, BarChartPanel } from "@/components/charts";
 import { defaultRange, DateRangePicker, type DateRange } from "@/components/DateRangePicker";
-import { downloadExport } from "@/lib/api";
+import {
+  insightVsAverage,
+  prefetchRange,
+  rangeInside,
+  sliceDashboard,
+} from "@/lib/dashboard";
 
 export default function DashboardOverviewPage() {
-  const [data, setData] = useState<AdminOverview | null>(null);
   const [range, setRange] = useState<DateRange>(defaultRange(30));
-  const [dauSeries, setDauSeries] = useState<{ date: string; value: number }[]>([]);
-  const [sessionSeries, setSessionSeries] = useState<{ date: string; value: number }[]>([]);
-  const [costSeries, setCostSeries] = useState<{ date: string; value: number }[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const window = prefetchRange();
+  const canSlice = rangeInside(window, range);
 
-  useEffect(() => {
-    Promise.all([
-      fetchOverview(),
-      fetchTimeseries({ metric: "dau", ...range }),
-      fetchTimeseries({ metric: "sessions", ...range }),
-      fetchTimeseries({ metric: "llm_cost_usd", ...range }),
-    ])
-      .then(([overview, dau, sessions, cost]) => {
-        setData(overview);
-        setDauSeries(dau.series);
-        setSessionSeries(sessions.series);
-        setCostSeries(cost.series);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
-  }, [range]);
+  const overviewQuery = useQuery({
+    queryKey: ["admin-overview"],
+    queryFn: fetchOverview,
+    staleTime: 30_000,
+  });
+
+  const dashboardQuery = useQuery({
+    queryKey: ["admin-dashboard", canSlice ? window : range],
+    queryFn: () =>
+      fetchDashboard(
+        canSlice ? window.from : range.from,
+        canSlice ? window.to : range.to
+      ),
+    placeholderData: keepPreviousData,
+  });
+
+  const view = useMemo(() => {
+    if (!dashboardQuery.data) return null;
+    return canSlice ? sliceDashboard(dashboardQuery.data, range) : dashboardQuery.data;
+  }, [dashboardQuery.data, canSlice, range]);
+
+  const data = overviewQuery.data;
+  const error =
+    overviewQuery.error instanceof Error
+      ? overviewQuery.error.message
+      : dashboardQuery.error instanceof Error
+        ? dashboardQuery.error.message
+        : null;
 
   return (
     <div>
       <PageHeader
         title="Overview"
         description="Platform metrics, unit economics, and trends."
+        actions={
+          <button
+            type="button"
+            onClick={() =>
+              downloadExport(
+                `/admin/export/timeseries?metric=dau&from=${range.from}&to=${range.to}`
+              )
+            }
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
+          >
+            Export DAU CSV
+          </button>
+        }
       />
 
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="sticky top-0 z-10 mb-6 border-b border-white/5 bg-zinc-950/80 py-3 backdrop-blur">
         <DateRangePicker value={range} onChange={setRange} />
-        <button
-          type="button"
-          onClick={() =>
-            downloadExport(
-              `/admin/export/timeseries?metric=dau&from=${range.from}&to=${range.to}`
-            )
-          }
-          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
-        >
-          Export DAU CSV
-        </button>
       </div>
 
       {error && <ErrorBanner message={error} />}
       {!data && !error && <LoadingState />}
 
-      {data && (
+      {data && view && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Total users" value={data.total_users} />
@@ -84,7 +101,7 @@ export default function DashboardOverviewPage() {
               label="Open issues"
               value={data.open_issues_count ?? 0}
               sub={
-                <Link href="/dashboard/feedback?kind=issue" className="text-violet-700 hover:underline">
+                <Link href="/dashboard/feedback?kind=issue" className="text-violet-300 hover:underline">
                   View in Feedback
                 </Link>
               }
@@ -93,7 +110,7 @@ export default function DashboardOverviewPage() {
               label="Open feedback"
               value={data.open_feedback_count ?? 0}
               sub={
-                <Link href="/dashboard/feedback?kind=feedback" className="text-violet-700 hover:underline">
+                <Link href="/dashboard/feedback?kind=feedback" className="text-violet-300 hover:underline">
                   View in Feedback
                 </Link>
               }
@@ -102,22 +119,25 @@ export default function DashboardOverviewPage() {
 
           <div className="mt-10 space-y-8">
             <section>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+              <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-zinc-500">
                 Daily active users
               </h2>
-              <TimeseriesChart data={dauSeries} label="DAU" />
+              <p className="mb-3 text-xs text-zinc-500">
+                {insightVsAverage(view.series.dau, "DAU")}
+              </p>
+              <TimeseriesChart data={view.series.dau} label="DAU" />
             </section>
             <section>
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
                 Dictation sessions per day
               </h2>
-              <BarChartPanel data={sessionSeries} label="Sessions" />
+              <BarChartPanel data={view.series.sessions ?? []} label="Sessions" />
             </section>
             <section>
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
                 LLM cost per day (USD)
               </h2>
-              <TimeseriesChart data={costSeries} label="USD" />
+              <TimeseriesChart data={view.series.llm_cost_usd} label="USD" />
             </section>
           </div>
         </>

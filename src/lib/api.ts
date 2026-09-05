@@ -43,6 +43,7 @@ export type AdminOverview = {
   dictation_sessions_mtd: number;
   words_used_mtd: number;
   commands_used_mtd: number;
+  agents_used_mtd: number;
   llm_cost_mtd_usd: number;
   mrr_usd: number;
   gross_margin_mtd_usd: number;
@@ -62,6 +63,8 @@ export type AdminUserRow = {
   word_quota_limit: number;
   command_quota_used: number;
   command_quota_limit: number;
+  agent_quota_used: number;
+  agent_quota_limit: number;
 };
 
 export type AdminUsersResponse = {
@@ -75,6 +78,7 @@ export type AdminUserDetail = AdminUserRow & {
   avatar_url: string | null;
   onboarding_completed: boolean;
   command_mode_enabled: boolean;
+  agent_mode_enabled?: boolean;
   dictation_sessions: number;
   last_active_at: string | null;
   trial_status: string;
@@ -179,6 +183,18 @@ export type CostOverview = {
     wasted_cost_usd: number;
     command_calls_mtd: number;
     waste_rate_pct: number | null;
+    command?: {
+      unfinalized_calls: number;
+      wasted_cost_usd: number;
+      calls_mtd: number;
+      waste_rate_pct: number | null;
+    };
+    agent?: {
+      unfinalized_calls: number;
+      wasted_cost_usd: number;
+      calls_mtd: number;
+      waste_rate_pct: number | null;
+    };
   };
 };
 
@@ -196,6 +212,40 @@ export type WebhookLogResponse = {
     created_at: string | null;
   }[];
 };
+
+export type DashboardResponse = {
+  from: string;
+  to: string;
+  series: Record<string, { date: string; value: number }[]>;
+  totals: Record<string, number>;
+  avg_dau: number;
+  peak_dau: number;
+  error_rate_pct: number | null;
+};
+
+export type UserChartResponse = {
+  user_id: string;
+  from: string;
+  to: string;
+  timeline: { date: string; value: number }[];
+  breakdown: {
+    dictation: number;
+    commands: number;
+    pie: { name: string; value: number; pct: number }[];
+  };
+};
+
+export function fetchDashboard(from?: string, to?: string) {
+  return adminFetch<DashboardResponse>(
+    `/admin/analytics/dashboard${qs({ from, to })}`
+  );
+}
+
+export function fetchUserChart(userId: string, from?: string, to?: string) {
+  return adminFetch<UserChartResponse>(
+    `/admin/analytics/users/${userId}/chart${qs({ from, to })}`
+  );
+}
 
 export function fetchPlatformSummary(from?: string, to?: string) {
   return adminFetch<PlatformSummary>(

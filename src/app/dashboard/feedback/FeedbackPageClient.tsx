@@ -30,17 +30,17 @@ function kindLabel(kind: AdminFeedbackRow["kind"]) {
 }
 
 function categoryLabel(category: string | null) {
-  if (!category) return "—";
+  if (!category) return "-";
   if (category === "account") return "Account & Data";
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
 function statusBadge(status: AdminFeedbackRow["status"]) {
   const styles: Record<AdminFeedbackRow["status"], string> = {
-    open: "bg-amber-50 text-amber-800",
-    read: "bg-blue-50 text-blue-800",
-    resolved: "bg-emerald-50 text-emerald-800",
-    archived: "bg-zinc-100 text-zinc-600",
+    open: "bg-amber-500/15 text-amber-300",
+    read: "bg-sky-500/15 text-sky-300",
+    resolved: "bg-emerald-500/15 text-emerald-300",
+    archived: "bg-zinc-800 text-zinc-400",
   };
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status]}`}>
@@ -162,7 +162,7 @@ export default function FeedbackPageClient() {
       )}
 
       {userIdFilter && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm text-violet-900">
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-2 text-sm text-violet-200">
           <span>Filtering by user</span>
           <Link
             href="/dashboard/feedback"
@@ -177,7 +177,7 @@ export default function FeedbackPageClient() {
         <select
           value={kindFilter}
           onChange={(e) => setKindFilter(e.target.value as "" | "feedback" | "issue")}
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+          className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
         >
           <option value="">All types</option>
           <option value="feedback">Feedback</option>
@@ -188,7 +188,7 @@ export default function FeedbackPageClient() {
           onChange={(e) =>
             setStatusFilter(e.target.value as "" | AdminFeedbackRow["status"])
           }
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+          className="rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
         >
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((status) => (
@@ -203,7 +203,7 @@ export default function FeedbackPageClient() {
             setKindFilter("");
             setStatusFilter("open");
           }}
-          className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50"
+          className="rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
         >
           Open only
         </button>
@@ -239,19 +239,19 @@ export default function FeedbackPageClient() {
                 items.map((item) => (
                   <tr
                     key={item.id}
-                    className="border-t border-zinc-100 hover:bg-zinc-50 cursor-pointer"
+                    className="cursor-pointer border-t border-white/5 hover:bg-zinc-800/50"
                     onClick={() => void openDetail(item.id)}
                   >
                     <td className={`${tableCellClass} whitespace-nowrap text-xs text-zinc-500`}>
                       {item.created_at
                         ? new Date(item.created_at).toLocaleString()
-                        : "—"}
+                        : "-"}
                     </td>
                     <td className={tableCellClass}>
                       <Link
                         href={`/dashboard/users/${item.user_id}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="font-medium text-zinc-900 hover:underline"
+                        className="font-medium text-zinc-100 hover:underline"
                       >
                         {item.user_email}
                       </Link>
@@ -262,10 +262,10 @@ export default function FeedbackPageClient() {
                     <td className={tableCellClass}>{kindLabel(item.kind)}</td>
                     <td className={tableCellClass}>{categoryLabel(item.category)}</td>
                     <td className={`${tableCellClass} max-w-[280px]`}>
-                      <p className="truncate text-zinc-700">{item.message}</p>
+                      <p className="truncate text-zinc-400">{item.message}</p>
                     </td>
                     <td className={`${tableCellClass} text-zinc-500`}>
-                      {item.attachment_count > 0 ? item.attachment_count : "—"}
+                      {item.attachment_count > 0 ? item.attachment_count : "-"}
                     </td>
                     <td className={tableCellClass}>{statusBadge(item.status)}</td>
                   </tr>
@@ -278,16 +278,16 @@ export default function FeedbackPageClient() {
 
       {selectedId && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-end bg-black/20"
+          className="fixed inset-0 z-50 flex items-center justify-end bg-black/60"
           onClick={closeDetail}
         >
           <div
-            className="h-full w-full max-w-xl overflow-y-auto bg-white shadow-2xl border-l border-zinc-200 p-8"
+            className="h-full w-full max-w-xl overflow-y-auto border-l border-white/10 bg-zinc-950 p-8 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
-                <h2 className="text-xl font-semibold text-zinc-900">
+                <h2 className="text-xl font-semibold text-zinc-50">
                   {detail ? kindLabel(detail.kind) : "Submission"}
                 </h2>
                 {detail && (
@@ -295,7 +295,7 @@ export default function FeedbackPageClient() {
                     <p className="text-sm text-zinc-500 mt-1">
                       <Link
                         href={`/dashboard/users/${detail.user_id}`}
-                        className="font-medium text-violet-700 hover:underline"
+                        className="font-medium text-violet-300 hover:underline"
                       >
                         {detail.user_email}
                       </Link>
@@ -312,7 +312,7 @@ export default function FeedbackPageClient() {
               <button
                 type="button"
                 onClick={closeDetail}
-                className="rounded-lg px-3 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100"
+                className="rounded-lg px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800"
               >
                 Close
               </button>
@@ -325,12 +325,12 @@ export default function FeedbackPageClient() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-zinc-500">Category</p>
-                    <p className="mt-1 text-zinc-800">{categoryLabel(detail.category)}</p>
+                    <p className="mt-1 text-zinc-200">{categoryLabel(detail.category)}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-zinc-500">Platform</p>
-                    <p className="mt-1 text-zinc-800">
-                      {detail.platform || "—"}
+                    <p className="mt-1 text-zinc-200">
+                      {detail.platform || "-"}
                       {detail.app_version ? ` · v${detail.app_version}` : ""}
                     </p>
                   </div>
@@ -338,7 +338,7 @@ export default function FeedbackPageClient() {
 
                 <div>
                   <p className="text-xs uppercase tracking-wide text-zinc-500 mb-2">Message</p>
-                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-800 whitespace-pre-wrap">
+                  <div className="whitespace-pre-wrap rounded-xl border border-white/10 bg-zinc-900 p-4 text-sm text-zinc-200">
                     {detail.message}
                   </div>
                 </div>
@@ -354,7 +354,7 @@ export default function FeedbackPageClient() {
                     onChange={(e) =>
                       setStatusDraft(e.target.value as AdminFeedbackRow["status"])
                     }
-                    className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
                   >
                     {STATUS_OPTIONS.map((status) => (
                       <option key={status} value={status}>
@@ -372,7 +372,7 @@ export default function FeedbackPageClient() {
                     value={notesDraft}
                     onChange={(e) => setNotesDraft(e.target.value)}
                     rows={4}
-                    className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
                     placeholder="Internal notes about this report…"
                   />
                 </div>
@@ -381,7 +381,7 @@ export default function FeedbackPageClient() {
                   type="button"
                   onClick={() => void saveDetail()}
                   disabled={saving}
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:opacity-60"
+                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-60"
                 >
                   {saving ? "Saving…" : "Save changes"}
                 </button>

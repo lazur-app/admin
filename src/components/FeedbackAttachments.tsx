@@ -129,7 +129,7 @@ export function FeedbackAttachmentCard({
 
       {!isImage && !isText && (
         <div className="border-t border-zinc-100 bg-zinc-50 px-3 py-3 text-xs text-zinc-500">
-          Preview not available — use download to view this file.
+          Preview not available, use download to view this file.
         </div>
       )}
 

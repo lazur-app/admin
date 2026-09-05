@@ -1,41 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { fetchUsers, type AdminUserRow, downloadExport } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { fetchUsers, downloadExport } from "@/lib/api";
 import {
   PageHeader,
   ErrorBanner,
   DataTable,
+  Badge,
   tableHeadClass,
   tableCellClass,
 } from "@/components/ui";
 
+function planTone(plan: string) {
+  const name = plan.toLowerCase();
+  if (name.includes("power")) return "primary" as const;
+  if (name.includes("pro")) return "success" as const;
+  if (name.includes("trial")) return "warn" as const;
+  return "muted" as const;
+}
+
 export default function UsersPage() {
-  const [items, setItems] = useState<AdminUserRow[]>([]);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async (searchTerm: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetchUsers({ search: searchTerm || undefined, limit: 50 });
-      setItems(res.items);
-      setTotal(res.total);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load users");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    load(query);
-  }, [query, load]);
+    const t = setTimeout(() => setQuery(search.trim()), 200);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const usersQuery = useQuery({
+    queryKey: ["admin-users", query],
+    queryFn: () => fetchUsers({ search: query || undefined, limit: 50 }),
+    placeholderData: keepPreviousData,
+  });
+
+  const items = usersQuery.data?.items ?? [];
+  const total = usersQuery.data?.total ?? 0;
+  const error =
+    usersQuery.error instanceof Error ? usersQuery.error.message : null;
 
   return (
     <div>
@@ -53,18 +57,12 @@ export default function UsersPage() {
           placeholder="Search by email or name…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none"
+          className="flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none"
         />
-        <button
-          type="submit"
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-        >
-          Search
-        </button>
         <button
           type="button"
           onClick={() => downloadExport("/admin/export/users")}
-          className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50"
+          className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800"
         >
           Export CSV
         </button>
@@ -84,20 +82,20 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {loading && (
+            {usersQuery.isLoading && (
               <tr>
                 <td colSpan={5} className={`${tableCellClass} text-center text-zinc-500`}>
                   Loading…
                 </td>
               </tr>
             )}
-            {!loading &&
+            {!usersQuery.isLoading &&
               items.map((u) => (
-                <tr key={u.id} className="border-t border-zinc-100 hover:bg-zinc-50">
+                <tr key={u.id} className="border-t border-white/5 hover:bg-zinc-800/50">
                   <td className={tableCellClass}>
                     <Link
                       href={`/dashboard/users/${u.id}`}
-                      className="font-medium text-zinc-900 hover:underline"
+                      className="font-medium text-zinc-100 hover:underline"
                     >
                       {u.email}
                     </Link>
@@ -105,24 +103,26 @@ export default function UsersPage() {
                       <p className="text-xs text-zinc-500">{u.name}</p>
                     )}
                   </td>
-                  <td className={tableCellClass}>{u.plan}</td>
-                  <td className={`${tableCellClass} text-zinc-600`}>
+                  <td className={tableCellClass}>
+                    <Badge tone={planTone(u.plan)}>{u.plan}</Badge>
+                  </td>
+                  <td className={`${tableCellClass} text-zinc-400`}>
                     {u.word_quota_used.toLocaleString()} /{" "}
                     {u.word_quota_limit.toLocaleString()}
                   </td>
-                  <td className={`${tableCellClass} text-zinc-600`}>
+                  <td className={`${tableCellClass} text-zinc-400`}>
                     {u.command_quota_used} / {u.command_quota_limit}
                   </td>
                   <td className={tableCellClass}>
                     {u.is_admin ? (
-                      <span className="text-zinc-900 font-medium">Yes</span>
+                      <Badge tone="primary">Admin</Badge>
                     ) : (
-                      <span className="text-zinc-400">—</span>
+                      <span className="text-zinc-600">-</span>
                     )}
                   </td>
                 </tr>
               ))}
-            {!loading && items.length === 0 && (
+            {!usersQuery.isLoading && items.length === 0 && (
               <tr>
                 <td colSpan={5} className={`${tableCellClass} text-center text-zinc-500`}>
                   No users found.

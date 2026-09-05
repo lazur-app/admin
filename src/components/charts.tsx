@@ -26,7 +26,7 @@ export type MultiSeries = {
   points: SeriesPoint[];
 };
 
-const COLORS = ["#353538", "#6b4bfc", "#2563eb", "#059669", "#d97706"];
+const COLORS = ["#8b5cf6", "#6b4bfc", "#38bdf8", "#34d399", "#f59e0b"];
 
 function mergeMultiSeries(series: MultiSeries[]) {
   const dates = new Set<string>();
@@ -56,17 +56,19 @@ export function TimeseriesChart({
     : (data ?? []).map((p) => ({ date: p.date.slice(5), value: p.value }));
 
   return (
-    <div className="h-64 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="h-64 w-full rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-sm">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#71717a" }} />
           <YAxis tick={{ fontSize: 11, fill: "#71717a" }} width={40} />
           <Tooltip
             contentStyle={{
+              background: "#18181b",
               borderRadius: 8,
-              border: "1px solid #e4e4e7",
+              border: "1px solid rgba(255,255,255,0.1)",
               fontSize: 12,
+              color: "#fafafa",
             }}
           />
           {multi?.length ? (
@@ -89,7 +91,7 @@ export function TimeseriesChart({
               type="monotone"
               dataKey="value"
               name={label}
-              stroke="#353538"
+              stroke="#8b5cf6"
               strokeWidth={2}
               dot={false}
             />
@@ -109,13 +111,20 @@ export function BarChartPanel({
 }) {
   const chartData = data.map((p) => ({ date: p.date.slice(5), value: p.value }));
   return (
-    <div className="h-56 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="h-56 w-full rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-sm">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#71717a" }} />
           <YAxis tick={{ fontSize: 11, fill: "#71717a" }} width={40} />
-          <Tooltip />
+          <Tooltip
+            contentStyle={{
+              background: "#18181b",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
           <Bar dataKey="value" name={label} fill="#6b4bfc" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -133,18 +142,25 @@ export function HourlyBarChart({
     sessions: h.sessions,
   }));
   return (
-    <div className="h-56 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="h-56 w-full rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-sm">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis
             dataKey="hour"
             tick={{ fontSize: 10, fill: "#71717a" }}
             interval={2}
           />
           <YAxis tick={{ fontSize: 11, fill: "#71717a" }} width={32} />
-          <Tooltip />
-          <Bar dataKey="sessions" fill="#353538" radius={[3, 3, 0, 0]} />
+          <Tooltip
+            contentStyle={{
+              background: "#18181b",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
+          <Bar dataKey="sessions" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -158,9 +174,9 @@ export function PieChartPanel({
   segments: { name: string; value: number }[];
   title?: string;
 }) {
-  const COLORS_PIE = ["#353538", "#6b4bfc", "#a1a1aa", "#2563eb", "#059669"];
+  const COLORS_PIE = ["#8b5cf6", "#6b4bfc", "#71717a", "#38bdf8", "#34d399"];
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-sm">
       {title && (
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
           {title}
@@ -201,10 +217,10 @@ export function FunnelBarChart({
     count: s.value,
   }));
   return (
-    <div className="h-72 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="h-72 w-full rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-sm">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 11, fill: "#71717a" }} />
           <YAxis
             type="category"
@@ -212,7 +228,14 @@ export function FunnelBarChart({
             width={100}
             tick={{ fontSize: 10, fill: "#71717a" }}
           />
-          <Tooltip />
+          <Tooltip
+            contentStyle={{
+              background: "#18181b",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
           <Bar dataKey="count" fill="#6b4bfc" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -232,10 +255,10 @@ export function HorizontalBarChart({
     value: d.value,
   }));
   return (
-    <div className="h-80 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="h-80 w-full rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-sm">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} layout="vertical" margin={{ left: 4, right: 16 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 11, fill: "#71717a" }} />
           <YAxis
             type="category"
@@ -244,7 +267,7 @@ export function HorizontalBarChart({
             tick={{ fontSize: 10, fill: "#71717a" }}
           />
           <Tooltip />
-          <Bar dataKey="value" name={label} fill="#353538" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="value" name={label} fill="#8b5cf6" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -262,10 +285,10 @@ export function DualAxisBarChart({
     cost: d.cost,
   }));
   return (
-    <div className="h-72 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="h-72 w-full rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-sm">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#71717a" }} />
           <YAxis
             yAxisId="left"
@@ -280,9 +303,16 @@ export function DualAxisBarChart({
             width={48}
             tickFormatter={(v) => `$${Number(v).toFixed(3)}`}
           />
-          <Tooltip />
+          <Tooltip
+            contentStyle={{
+              background: "#18181b",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar yAxisId="left" dataKey="words" name="Words" fill="#353538" radius={[4, 4, 0, 0]} />
+          <Bar yAxisId="left" dataKey="words" name="Words" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
           <Line
             yAxisId="right"
             type="monotone"

@@ -25,7 +25,7 @@ const COHORTS = [
   { id: "onboarding_done", label: "Onboarding completed" },
 ] as const;
 
-const COLORS = ["#353538", "#6b4bfc", "#2563eb", "#059669", "#d97706"];
+const COLORS = ["#8b5cf6", "#6b4bfc", "#38bdf8", "#34d399", "#f59e0b"];
 
 export default function ComparePage() {
   const [range, setRange] = useState<DateRange>(defaultRange(30));
@@ -104,8 +104,8 @@ export default function ComparePage() {
             }}
             className={`rounded-full border px-3 py-1 text-xs font-medium ${
               cohort === c.id && selectedUsers.length === 0
-                ? "border-zinc-900 bg-zinc-900 text-white"
-                : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                ? "border-violet-500 bg-violet-600 text-white"
+                : "border-white/10 text-zinc-400 hover:bg-zinc-800"
             }`}
           >
             {c.label}
@@ -125,7 +125,7 @@ export default function ComparePage() {
             }
             downloadExport(`/admin/export/compare?${params.toString()}`);
           }}
-          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50"
+          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
         >
           Export compare CSV
         </button>
@@ -137,15 +137,15 @@ export default function ComparePage() {
           placeholder="Add user by email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
         />
         {searchResults.length > 0 && (
-          <ul className="absolute z-10 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg">
+          <ul className="absolute z-10 mt-1 w-full rounded-lg border border-white/10 bg-zinc-900 shadow-lg">
             {searchResults.map((u) => (
               <li key={u.id}>
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50"
+                  className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800"
                   onClick={() => {
                     if (!selectedUsers.includes(u.id) && selectedUsers.length < 5) {
                       setSelectedUsers([...selectedUsers, u.id]);
@@ -168,12 +168,12 @@ export default function ComparePage() {
           {selectedUsers.map((id) => (
             <span
               key={id}
-              className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-700"
+              className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-200"
             >
               {data?.rows.find((r) => r.user_id === id)?.email ?? id.slice(0, 8)}
               <button
                 type="button"
-                className="text-zinc-400 hover:text-zinc-900"
+                className="text-zinc-500 hover:text-zinc-100"
                 onClick={() =>
                   setSelectedUsers(selectedUsers.filter((x) => x !== id))
                 }
@@ -184,7 +184,7 @@ export default function ComparePage() {
           ))}
           <button
             type="button"
-            className="text-xs text-zinc-500 hover:text-zinc-900"
+            className="text-xs text-zinc-500 hover:text-zinc-100"
             onClick={() => {
               setSelectedUsers([]);
               setCohort("paid");
@@ -201,7 +201,7 @@ export default function ComparePage() {
       {data && !loading && (
         <div className="mt-8 space-y-8">
           {data.cohort_summary && (
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
+            <div className="rounded-xl border border-white/10 bg-zinc-900 p-4 text-sm text-zinc-300">
               Cohort <strong>{data.cohort_summary.cohort}</strong>:{" "}
               {data.cohort_summary.user_count} users · avg{" "}
               {data.cohort_summary.avg_sessions} sessions · avg{" "}
@@ -259,9 +259,9 @@ export default function ComparePage() {
               </thead>
               <tbody>
                 {data.rows.map((row) => (
-                  <tr key={row.user_id} className="border-t border-zinc-100">
+                  <tr key={row.user_id} className="border-t border-white/5">
                     <td className={tableCellClass}>{row.email}</td>
-                    <td className={tableCellClass}>{row.plan ?? "—"}</td>
+                    <td className={tableCellClass}>{row.plan ?? "-"}</td>
                     <td className={tableCellClass}>{row.words.toLocaleString()}</td>
                     <td className={tableCellClass}>
                       {row.llm_cost_usd != null

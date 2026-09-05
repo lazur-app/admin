@@ -28,7 +28,7 @@ export function UserFeedbackSection({ userId }: { userId: string }) {
   }, [userId]);
 
   return (
-    <section className="mt-8 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+    <section className="mt-8 rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-sm">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
           Feedback & issues
@@ -36,7 +36,7 @@ export function UserFeedbackSection({ userId }: { userId: string }) {
         {total > 0 && (
           <Link
             href={`/dashboard/feedback?user_id=${userId}`}
-            className="text-sm font-medium text-violet-700 hover:underline"
+            className="text-sm font-medium text-violet-300 hover:underline"
           >
             View all ({total})
           </Link>
@@ -48,26 +48,26 @@ export function UserFeedbackSection({ userId }: { userId: string }) {
       ) : items.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-500">No submissions from this user yet.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-zinc-100">
+        <ul className="mt-4 divide-y divide-white/5">
           {items.map((item) => (
             <li key={item.id} className="py-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-900">
+                  <p className="text-sm font-medium text-zinc-100">
                     {kindLabel(item.kind)}
                     {item.category ? ` · ${item.category}` : ""}
                   </p>
-                  <p className="mt-1 truncate text-sm text-zinc-600">{item.message}</p>
+                  <p className="mt-1 truncate text-sm text-zinc-400">{item.message}</p>
                   <p className="mt-1 text-xs text-zinc-400">
                     {item.created_at
                       ? new Date(item.created_at).toLocaleString()
-                      : "—"}
+                      : "-"}
                     {item.attachment_count > 0
                       ? ` · ${item.attachment_count} file${item.attachment_count === 1 ? "" : "s"}`
                       : ""}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs capitalize text-zinc-600">
+                <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-xs capitalize text-zinc-300">
                   {item.status}
                 </span>
               </div>
