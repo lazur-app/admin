@@ -1,7 +1,7 @@
 export type Period = { signups: number; activations: number; conversions: number; cancellations: number; active_users: number; revenue_usd: number; cost_usd: number };
 export type Overview = {
   range_days: number; current: Period; previous: Period;
-  mrr: { mrr_usd: number; by_plan: Record<string, number>; paying: number };
+  mrr: { mrr_usd: number; by_plan: Record<string, number>; paying: number; discounted?: number };
   plan_mix: { trial: number; pro: number; power: number; not_started: number; lapsed: number; total: number };
   trial_to_paid_pct: number | null;
   series: { date: string; signups: number; active_users: number; revenue_usd: number }[];

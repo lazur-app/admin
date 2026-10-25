@@ -32,7 +32,7 @@ export default function CostsPage() {
           <div className="grid gap-5 md:grid-cols-3">
             <Stat label="Revenue" value={fmt.usd(q.data.revenue_usd, 2)} />
             <Stat label="AI cost" value={fmt.usd(q.data.cost_usd, 2)} />
-            <Stat tone="lime" label="Gross margin" value={fmt.usd(q.data.margin_usd, 2)} hint={q.data.margin_pct == null ? "no revenue in range" : `${q.data.margin_pct}% of revenue`} />
+            <Stat tone={q.data.margin_usd < 0 ? "plain" : "lime"} label="Gross margin" value={fmt.usd(q.data.margin_usd, 2)} hint={q.data.margin_pct == null ? "no revenue in range" : `${q.data.margin_pct}% of revenue`} />
           </div>
           <Card>
             <CardTitle>Cost per day</CardTitle>

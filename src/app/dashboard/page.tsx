@@ -34,8 +34,8 @@ function Body({ o, funnel }: { o: Overview; funnel: FunnelStep[] }) {
   return (
     <div className="grid gap-5">
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <Stat tone="lime" label="Monthly recurring revenue" value={fmt.usd(o.mrr.mrr_usd)} hint={`${o.mrr.paying} paying · ${fmt.usd(c.revenue_usd)} collected in range`} />
-        <Stat label="New signups" value={fmt.num(c.signups)} delta={<Delta now={c.signups} before={p.signups} />} hint={`${fmt.num(c.activations)} opened the app`} />
+        <Stat tone="lime" label="Monthly recurring revenue" value={fmt.usd(o.mrr.mrr_usd)} hint={`${o.mrr.paying} subscribers${o.mrr.discounted ? ` (${o.mrr.discounted} on 100% discount)` : ""} · ${fmt.usd(c.revenue_usd)} collected in range`} />
+        <Stat label="New signups" value={fmt.num(c.signups)} delta={<Delta now={c.signups} before={p.signups} />} hint={`${fmt.num(c.activations)} of them opened the app`} />
         <Stat label="Active users" value={fmt.num(c.active_users)} delta={<Delta now={c.active_users} before={p.active_users} />} hint="used Lazur at least once" />
         <Stat tone="ink" label="Conversions" value={fmt.num(c.conversions)} delta={<Delta now={c.conversions} before={p.conversions} />}
           hint={`${fmt.num(c.cancellations)} canceled · trial→paid ${fmt.pct(o.trial_to_paid_pct)}`} />

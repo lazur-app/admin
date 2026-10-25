@@ -7,7 +7,7 @@ import { api, fmt } from "@/lib/api";
 import { Card, CardTitle, Delta, Empty, ErrorBox, Loading, PageTitle, Pill, RangePicker, Stat } from "@/components/ui";
 
 type Revenue = {
-  mrr: { mrr_usd: number; by_plan: Record<string, number>; paying: number };
+  mrr: { mrr_usd: number; by_plan: Record<string, number>; paying: number; discounted?: number };
   revenue_usd: number; previous_revenue_usd: number;
   orders: { user_id: string; email: string; amount_usd: number; status: string; reason: string | null; paid_at: string | null; created_at: string | null }[];
 };
@@ -27,7 +27,7 @@ export default function RevenuePage() {
         <div className="grid gap-5">
           <div className="grid gap-5 md:grid-cols-3">
             <Stat tone="lime" label="MRR" value={fmt.usd(q.data.mrr.mrr_usd)} hint="yearly plans counted per month" />
-            <Stat label="Paying customers" value={fmt.num(q.data.mrr.paying)} />
+            <Stat label="Subscribers" value={fmt.num(q.data.mrr.paying)} hint={q.data.mrr.discounted ? `${q.data.mrr.discounted} on a 100% discount, counted as $0` : undefined} />
             <Stat tone="ink" label={`Collected, last ${days} days`} value={fmt.usd(q.data.revenue_usd, 2)}
               delta={<Delta now={q.data.revenue_usd} before={q.data.previous_revenue_usd} />} />
           </div>
