@@ -4,7 +4,8 @@ import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, fmt } from "@/lib/api";
 import type { UserRow } from "@/lib/types";
-import { Card, CardTitle, Empty, ErrorBox, Loading, PageTitle, Pill, Stat, planLabel, planTone } from "@/components/ui";
+import { Bars, Card, CardTitle, Delta, Empty, ErrorBox, Loading, PageTitle, Pill, RangePicker, Stat, planLabel, planTone } from "@/components/ui";
+import { Adoption, BarList, HealthParts, Heatmap, duration } from "@/components/userCharts";
 
 type Detail = UserRow & {
   history_storage: string;
@@ -13,6 +14,28 @@ type Detail = UserRow & {
   jobs: { status: string; steps: number; has_report: boolean; failure_kind: string | null; cost_usd: number | null; started_at: string; finished_at: string | null }[];
   orders: { amount_usd: number; status: string; reason: string | null; paid_at: string | null; invoice_url: string | null }[];
   cost_30d: { feature: string; calls: number; tokens: number; cost_usd: number }[];
+  analytics: Analytics;
+};
+
+type Analytics = {
+  series: { date: string; words: number; dictations: number; actions: number; jobs: number; cost_usd: number }[];
+  hours: { at: string; count: number }[];
+  kpis: {
+    active_days_30: number; active_days_prev_30: number; days_idle: number | null;
+    lifetime_words: number; dictations: number; commands: number; avg_words_per_dictation: number | null;
+    minutes_saved: number; minutes_to_first_dictation: number | null; retry_rate_pct: number | null;
+    capability_gaps: number; failures: number; limits_hit: number;
+    upgrade_cards: number; upgrade_clicks: number; checkouts: number;
+    jobs: number; jobs_done: number; jobs_failed: number; avg_job_minutes: number | null;
+    lifetime_revenue_usd: number; lifetime_cost_usd: number; lifetime_margin_usd: number; cost_per_active_day_usd: number | null;
+  };
+  health: { score: number; label: string; parts: Record<string, number>; fail_rate_pct: number };
+  adoption: { key: string; label: string; at: string | null }[];
+  tools: { tool: string; count: number }[];
+};
+
+const HEALTH_TONE: Record<string, "lime" | "sky" | "peach" | "rose" | "gray"> = {
+  Healthy: "lime", "Needs attention": "peach", "At risk": "rose", Dormant: "gray",
 };
 
 const EVENT_TONE: Record<string, "lime" | "sky" | "peach" | "rose" | "gray"> = {
@@ -25,6 +48,7 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
   const qc = useQueryClient();
   const user = useQuery({ queryKey: ["user", id], queryFn: () => api<Detail>(`/admin/users/${id}`) });
   const [notice, setNotice] = useState<string | null>(null);
+  const [days, setDays] = useState(30);
   const action = useMutation({
     mutationFn: (body: Record<string, unknown>) => api(`/admin/users/${id}/plan`, { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => { setNotice("Saved."); qc.invalidateQueries({ queryKey: ["user", id] }); },
@@ -41,12 +65,7 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
       <PageTitle title={u.name || u.email.split("@")[0]} subtitle={`${u.email} · joined ${fmt.date(u.created_at)} · last active ${fmt.ago(u.last_active_at)}`}
         actions={<Pill tone={planTone(u.plan)}>{planLabel(u.plan)}</Pill>} />
       <div className="grid gap-5">
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <Stat tone="lime" label="Words this month" value={fmt.num(u.words_mtd)} />
-          <Stat label="AI actions this month" value={fmt.num(u.actions_mtd)} />
-          <Stat label="AI cost, 30 days" value={fmt.usd(u.cost_30d_usd, 2)} hint={u.cost_30d.map((c) => `${c.feature} ${fmt.usd(c.cost_usd, 2)}`).join(" · ") || "no model calls"} />
-          <Stat tone="ink" label="Background jobs" value={fmt.num(u.jobs.length)} hint={`${u.jobs.filter((j) => j.status === "failed").length} failed`} />
-        </div>
+        <UserAnalytics u={u} days={days} setDays={setDays} />
 
         <div className="grid gap-5 xl:grid-cols-[1fr_1.3fr]">
           <Card>
@@ -116,6 +135,85 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
             ) : <Empty>No payments.</Empty>}
           </Card>
         </div>
+      </div>
+    </>
+  );
+}
+
+function UserAnalytics({ u, days, setDays }: { u: Detail; days: number; setDays: (d: number) => void }) {
+  const a = u.analytics;
+  const k = a.kpis;
+  const range = a.series.slice(-days);
+  const day = (d: string) => fmt.date(`${d}T00:00:00`);
+  const idle = k.days_idle == null ? "never used" : k.days_idle === 0 ? "used today" : `last used ${k.days_idle}d ago`;
+  return (
+    <>
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <Stat tone="ink" label="Health score" value={`${a.health.score}/100`}
+          delta={<Pill tone={HEALTH_TONE[a.health.label] ?? "gray"}>{a.health.label}</Pill>} hint={idle} />
+        <Stat label="Active days, last 30" value={`${k.active_days_30}/30`}
+          delta={<Delta now={k.active_days_30} before={k.active_days_prev_30} />} hint={`${k.active_days_prev_30} in the 30 days before`} />
+        <Stat label="Words dictated, all time" value={fmt.num(k.lifetime_words)}
+          hint={`${fmt.num(k.dictations)} dictations · ${k.avg_words_per_dictation ?? "–"} words each · ~${duration(k.minutes_saved)} saved vs typing`} />
+        <Stat tone="lime" label="Lifetime margin" value={fmt.usd(k.lifetime_margin_usd, 2)}
+          hint={`${fmt.usd(k.lifetime_revenue_usd, 2)} paid · ${fmt.usd(k.lifetime_cost_usd, 2)} AI cost${k.cost_per_active_day_usd != null ? ` · ${fmt.usd(k.cost_per_active_day_usd, 2)} per active day` : ""}`} />
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <Stat label="AI actions, all time" value={fmt.num(k.commands)}
+          hint={`${k.retry_rate_pct ?? 0}% asked again · ${k.capability_gaps} couldn't do · ${k.limits_hit} limits hit`} />
+        <Stat label="Time to first dictation" value={duration(k.minutes_to_first_dictation)} hint="from first opening the app" />
+        <Stat label="Background jobs" value={`${k.jobs_done}/${k.jobs}`}
+          hint={`finished · ${k.jobs_failed} failed${k.avg_job_minutes != null ? ` · ${duration(k.avg_job_minutes)} average` : ""}`} />
+        <Stat label="Upgrade intent" value={`${k.upgrade_cards} → ${k.upgrade_clicks} → ${k.checkouts}`} hint="upgrade cards seen → clicked → checkouts started" />
+      </div>
+
+      <Card>
+        <CardTitle aside={<RangePicker value={days} onChange={setDays} />}>Usage over time</CardTitle>
+        <div className="grid gap-8 xl:grid-cols-3">
+          <div>
+            <p className="mb-3 text-[13px] text-muted">Words dictated per day · {fmt.num(range.reduce((n, d) => n + d.words, 0))} total</p>
+            <Bars height={120} data={range.map((d) => ({ label: day(d.date), value: d.words }))} />
+          </div>
+          <div>
+            <p className="mb-3 text-[13px] text-muted">AI actions per day · {fmt.num(range.reduce((n, d) => n + d.actions, 0))} total</p>
+            <Bars height={120} data={range.map((d) => ({ label: day(d.date), value: d.actions }))} />
+          </div>
+          <div>
+            <p className="mb-3 text-[13px] text-muted">AI cost per day · {fmt.usd(range.reduce((n, d) => n + d.cost_usd, 0), 2)} total</p>
+            <Bars height={120} format={(n) => fmt.usd(n, 3)} data={range.map((d) => ({ label: day(d.date), value: d.cost_usd }))} />
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+        <Card>
+          <CardTitle aside={<span className="text-[13px] text-muted">last 90 days</span>}>When they use Lazur</CardTitle>
+          <Heatmap hours={a.hours} />
+        </Card>
+        <Card>
+          <CardTitle aside={<Pill tone={HEALTH_TONE[a.health.label] ?? "gray"}>{a.health.label}</Pill>}>Why this health score</CardTitle>
+          <HealthParts parts={a.health.parts} failRate={a.health.fail_rate_pct} />
+        </Card>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Card>
+          <CardTitle>Feature adoption</CardTitle>
+          <Adoption steps={a.adoption} />
+        </Card>
+        <Card>
+          <CardTitle aside={<span className="text-[13px] text-muted">last 90 days</span>}>What they ask Lazur to do</CardTitle>
+          {a.tools.length
+            ? <BarList items={a.tools.map((t) => ({ label: t.tool.replace(/_/g, " "), value: t.count }))} />
+            : <Empty>No tool use yet.</Empty>}
+        </Card>
+        <Card>
+          <CardTitle aside={<span className="text-[13px] text-muted">last 30 days</span>}>AI cost by feature</CardTitle>
+          {u.cost_30d.length
+            ? <BarList format={(n) => fmt.usd(n, 3)} items={[...u.cost_30d].sort((x, y) => y.cost_usd - x.cost_usd).map((c) => ({ label: `${c.feature.replace(/_/g, " ")} · ${fmt.num(c.calls)} calls`, value: c.cost_usd }))} />
+            : <Empty>No model calls.</Empty>}
+        </Card>
       </div>
     </>
   );
