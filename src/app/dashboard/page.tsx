@@ -1,147 +1,95 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { fetchOverview, fetchDashboard, downloadExport } from "@/lib/api";
-import { StatCard, PageHeader, ErrorBanner, LoadingState } from "@/components/ui";
-import { TimeseriesChart, BarChartPanel } from "@/components/charts";
-import { defaultRange, DateRangePicker, type DateRange } from "@/components/DateRangePicker";
-import {
-  insightVsAverage,
-  prefetchRange,
-  rangeInside,
-  sliceDashboard,
-} from "@/lib/dashboard";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api, fmt } from "@/lib/api";
+import type { FunnelStep, Overview } from "@/lib/types";
+import { Bars, Card, CardTitle, Delta, ErrorBox, Loading, PageTitle, Pill, RangePicker, Ring, Stat } from "@/components/ui";
 
-export default function DashboardOverviewPage() {
-  const [range, setRange] = useState<DateRange>(defaultRange(30));
-  const window = prefetchRange();
-  const canSlice = rangeInside(window, range);
+const EVENT_LABEL: Record<string, string> = {
+  signed_up: "Signed up", app_activated: "Opened the app", trial_started: "Trial started",
+  subscription_started: "Subscribed", subscription_canceled: "Canceled", trial_expired: "Trial ended",
+};
+const EVENT_TONE: Record<string, "lime" | "sky" | "peach" | "rose" | "gray"> = {
+  subscription_started: "lime", trial_started: "sky", app_activated: "sky", signed_up: "gray", subscription_canceled: "rose", trial_expired: "peach",
+};
 
-  const overviewQuery = useQuery({
-    queryKey: ["admin-overview"],
-    queryFn: fetchOverview,
-    staleTime: 30_000,
-  });
-
-  const dashboardQuery = useQuery({
-    queryKey: ["admin-dashboard", canSlice ? window : range],
-    queryFn: () =>
-      fetchDashboard(
-        canSlice ? window.from : range.from,
-        canSlice ? window.to : range.to
-      ),
-    placeholderData: keepPreviousData,
-  });
-
-  const view = useMemo(() => {
-    if (!dashboardQuery.data) return null;
-    return canSlice ? sliceDashboard(dashboardQuery.data, range) : dashboardQuery.data;
-  }, [dashboardQuery.data, canSlice, range]);
-
-  const data = overviewQuery.data;
-  const error =
-    overviewQuery.error instanceof Error
-      ? overviewQuery.error.message
-      : dashboardQuery.error instanceof Error
-        ? dashboardQuery.error.message
-        : null;
+export default function OverviewPage() {
+  const [days, setDays] = useState(30);
+  const overview = useQuery({ queryKey: ["overview", days], queryFn: () => api<Overview>(`/admin/overview?days=${days}`) });
+  const funnel = useQuery({ queryKey: ["funnel", days], queryFn: () => api<{ steps: FunnelStep[] }>(`/admin/funnel?days=${days}`) });
 
   return (
-    <div>
-      <PageHeader
-        title="Overview"
-        description="Platform metrics, unit economics, and trends."
-        actions={
-          <button
-            type="button"
-            onClick={() =>
-              downloadExport(
-                `/admin/export/timeseries?metric=dau&from=${range.from}&to=${range.to}`
-              )
-            }
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
-          >
-            Export DAU CSV
-          </button>
-        }
-      />
+    <>
+      <PageTitle title="Overview" subtitle={`Last ${days} days, compared with the ${days} before.`} actions={<RangePicker value={days} onChange={setDays} />} />
+      {overview.isLoading ? <Loading /> : overview.error ? <ErrorBox error={overview.error} /> : overview.data ? <Body o={overview.data} funnel={funnel.data?.steps ?? []} /> : null}
+    </>
+  );
+}
 
-      <div className="sticky top-0 z-10 mb-6 border-b border-white/5 bg-zinc-950/80 py-3 backdrop-blur">
-        <DateRangePicker value={range} onChange={setRange} />
+function Body({ o, funnel }: { o: Overview; funnel: FunnelStep[] }) {
+  const c = o.current, p = o.previous;
+  const mix = o.plan_mix;
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <Stat tone="lime" label="Monthly recurring revenue" value={fmt.usd(o.mrr.mrr_usd)} hint={`${o.mrr.paying} paying · ${fmt.usd(c.revenue_usd)} collected in range`} />
+        <Stat label="New signups" value={fmt.num(c.signups)} delta={<Delta now={c.signups} before={p.signups} />} hint={`${fmt.num(c.activations)} opened the app`} />
+        <Stat label="Active users" value={fmt.num(c.active_users)} delta={<Delta now={c.active_users} before={p.active_users} />} hint="used Lazur at least once" />
+        <Stat tone="ink" label="Conversions" value={fmt.num(c.conversions)} delta={<Delta now={c.conversions} before={p.conversions} />}
+          hint={`${fmt.num(c.cancellations)} canceled · trial→paid ${fmt.pct(o.trial_to_paid_pct)}`} />
       </div>
 
-      {error && <ErrorBanner message={error} />}
-      {!data && !error && <LoadingState />}
-
-      {data && view && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total users" value={data.total_users} />
-            <StatCard label="Active subscriptions" value={data.active_subscriptions} />
-            <StatCard label="MRR" value={`$${data.mrr_usd.toFixed(2)}`} />
-            <StatCard
-              label="Gross margin (MTD)"
-              value={`$${data.gross_margin_mtd_usd.toFixed(2)}`}
-              sub={
-                data.gross_margin_pct != null
-                  ? `${data.gross_margin_pct}% of MRR`
-                  : undefined
-              }
-            />
-            <StatCard label="Dictation sessions (MTD)" value={data.dictation_sessions_mtd} />
-            <StatCard label="Words used (MTD)" value={data.words_used_mtd} />
-            <StatCard label="Commands used (MTD)" value={data.commands_used_mtd} />
-            <StatCard
-              label="LLM cost (MTD)"
-              value={`$${data.llm_cost_mtd_usd.toFixed(4)}`}
-            />
-            <StatCard
-              label="Open issues"
-              value={data.open_issues_count ?? 0}
-              sub={
-                <Link href="/dashboard/feedback?kind=issue" className="text-violet-300 hover:underline">
-                  View in Feedback
-                </Link>
-              }
-            />
-            <StatCard
-              label="Open feedback"
-              value={data.open_feedback_count ?? 0}
-              sub={
-                <Link href="/dashboard/feedback?kind=feedback" className="text-violet-300 hover:underline">
-                  View in Feedback
-                </Link>
-              }
-            />
+      <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+        <Card>
+          <CardTitle aside={<span className="text-[13px] text-muted">daily</span>}>Active users</CardTitle>
+          <Bars data={o.series.map((d) => ({ label: fmt.date(d.date), value: d.active_users }))} />
+        </Card>
+        <Card className="flex flex-col">
+          <CardTitle>Where everyone is</CardTitle>
+          <div className="flex flex-1 items-center gap-6">
+            <Ring pct={mix.total ? Math.round(100 * (mix.pro + mix.power) / mix.total) : 0} label={`${mix.total ? Math.round(100 * (mix.pro + mix.power) / mix.total) : 0}%`} sub="paying" />
+            <ul className="flex-1 space-y-2.5 text-[14px]">
+              {[["Power", mix.power, "ink"], ["Pro", mix.pro, "lime"], ["On trial", mix.trial, "sky"], ["Trial not started", mix.not_started, "gray"], ["Trial ended, unpaid", mix.lapsed, "peach"]].map(([l, n, t]) => (
+                <li key={l as string} className="flex items-center justify-between gap-3">
+                  <Pill tone={t as "ink"}>{l as string}</Pill>
+                  <span className="tabular font-semibold">{n as number}</span>
+                </li>
+              ))}
+            </ul>
           </div>
+        </Card>
+      </div>
 
-          <div className="mt-10 space-y-8">
-            <section>
-              <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-                Daily active users
-              </h2>
-              <p className="mb-3 text-xs text-zinc-500">
-                {insightVsAverage(view.series.dau, "DAU")}
-              </p>
-              <TimeseriesChart data={view.series.dau} label="DAU" />
-            </section>
-            <section>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-                Dictation sessions per day
-              </h2>
-              <BarChartPanel data={view.series.sessions ?? []} label="Sessions" />
-            </section>
-            <section>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-                LLM cost per day (USD)
-              </h2>
-              <TimeseriesChart data={view.series.llm_cost_usd} label="USD" />
-            </section>
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <Card>
+          <CardTitle aside={<span className="text-[13px] text-muted">people who signed up in range</span>}>Funnel</CardTitle>
+          <div className="space-y-3">
+            {funnel.map((s, i) => (
+              <div key={s.step} className="grid grid-cols-[150px_1fr_60px] items-center gap-3 text-[14px]">
+                <span className="text-muted">{s.step}</span>
+                <div className="h-9 overflow-hidden rounded-full bg-surface">
+                  <div className={`h-full rounded-full ${i === funnel.length - 1 ? "bg-lime" : "bg-sky"}`} style={{ width: `${Math.max(2, s.pct ?? 0)}%` }} />
+                </div>
+                <span className="tabular text-right font-semibold">{s.users}</span>
+              </div>
+            ))}
           </div>
-        </>
-      )}
+        </Card>
+        <Card>
+          <CardTitle aside={<Link href="/dashboard/users" className="text-[13px] text-muted hover:text-ink">All users →</Link>}>Recent activity</CardTitle>
+          <div className="divide-y divide-line">
+            {o.recent.length ? o.recent.map((r, i) => (
+              <Link key={i} href={`/dashboard/users/${r.user_id}`} className="flex items-center gap-3 py-3 hover:opacity-80">
+                <Pill tone={EVENT_TONE[r.event] ?? "gray"}>{EVENT_LABEL[r.event] ?? r.event}</Pill>
+                <span className="min-w-0 flex-1 truncate text-[14px]">{r.name || r.email}</span>
+                <span className="shrink-0 text-[12px] text-muted">{fmt.ago(r.at)}</span>
+              </Link>
+            )) : <p className="py-6 text-center text-[13px] text-muted">Nothing yet in this range.</p>}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

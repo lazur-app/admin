@@ -1,137 +1,74 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { fetchUsers, downloadExport } from "@/lib/api";
-import {
-  PageHeader,
-  ErrorBanner,
-  DataTable,
-  Badge,
-  tableHeadClass,
-  tableCellClass,
-} from "@/components/ui";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { api, fmt } from "@/lib/api";
+import type { UserRow } from "@/lib/types";
+import { Card, ErrorBox, Loading, PageTitle, Pill, planLabel, planTone } from "@/components/ui";
 
-function planTone(plan: string) {
-  const name = plan.toLowerCase();
-  if (name.includes("power")) return "primary" as const;
-  if (name.includes("pro")) return "success" as const;
-  if (name.includes("trial")) return "warn" as const;
-  return "muted" as const;
+function Users() {
+  const params = useSearchParams();
+  const [q, setQ] = useState(params.get("q") ?? "");
+  const [page, setPage] = useState(0);
+  const limit = 50;
+  const users = useQuery({
+    queryKey: ["users", q, page],
+    queryFn: () => api<{ total: number; items: UserRow[] }>(`/admin/users?limit=${limit}&offset=${page * limit}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
+  });
+
+  return (
+    <>
+      <PageTitle title="Users" subtitle={users.data ? `${users.data.total} people` : undefined}
+        actions={<input value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} placeholder="Filter by email or name"
+          className="h-11 w-[280px] rounded-full bg-card px-5 text-[14px] outline-none placeholder:text-faint" />} />
+      {users.isLoading ? <Loading /> : users.error ? <ErrorBox error={users.error} /> : (
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full min-w-[900px] text-[14px]">
+            <thead>
+              <tr className="text-left text-[12px] text-muted">
+                {["Person", "Plan", "Words (month)", "AI actions (month)", "AI cost (30d)", "Onboarding", "Last active", "Joined"].map((h) => (
+                  <th key={h} className="bg-surface px-5 py-3.5 font-medium first:rounded-tl-[28px] last:rounded-tr-[28px]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {users.data?.items.map((u) => (
+                <tr key={u.id} className="hover:bg-surface/60">
+                  <td className="px-5 py-3.5">
+                    <Link href={`/dashboard/users/${u.id}`} className="flex items-center gap-3">
+                      {u.avatar_url ? <img src={u.avatar_url} alt="" className="h-9 w-9 rounded-full" /> : <span className="grid h-9 w-9 place-items-center rounded-full bg-surface text-[12px] font-semibold">{(u.name || u.email)[0].toUpperCase()}</span>}
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{u.name || u.email.split("@")[0]}</span>
+                        <span className="block truncate text-[12px] text-muted">{u.email}</span>
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="px-5 py-3.5"><Pill tone={planTone(u.plan)}>{planLabel(u.plan)}</Pill>
+                    {u.plan === "pro_trial" && u.trial_ends_at ? <span className="ml-2 text-[12px] text-muted">ends {fmt.date(u.trial_ends_at)}</span> : null}</td>
+                  <td className="tabular px-5 py-3.5">{fmt.num(u.words_mtd)}</td>
+                  <td className="tabular px-5 py-3.5">{fmt.num(u.actions_mtd)}</td>
+                  <td className="tabular px-5 py-3.5">{fmt.usd(u.cost_30d_usd, 2)}</td>
+                  <td className="px-5 py-3.5">{u.onboarding_completed ? <Pill tone="lime">Done</Pill> : <Pill>Not yet</Pill>}</td>
+                  <td className="px-5 py-3.5 text-muted">{fmt.ago(u.last_active_at)}</td>
+                  <td className="px-5 py-3.5 text-muted">{fmt.date(u.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {users.data && users.data.total > limit ? (
+            <div className="flex items-center justify-end gap-2 p-4">
+              <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="rounded-full bg-surface px-4 py-2 text-[13px] disabled:opacity-40">Previous</button>
+              <button disabled={(page + 1) * limit >= users.data.total} onClick={() => setPage((p) => p + 1)} className="rounded-full bg-surface px-4 py-2 text-[13px] disabled:opacity-40">Next</button>
+            </div>
+          ) : null}
+        </Card>
+      )}
+    </>
+  );
 }
 
 export default function UsersPage() {
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    const t = setTimeout(() => setQuery(search.trim()), 200);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  const usersQuery = useQuery({
-    queryKey: ["admin-users", query],
-    queryFn: () => fetchUsers({ search: query || undefined, limit: 50 }),
-    placeholderData: keepPreviousData,
-  });
-
-  const items = usersQuery.data?.items ?? [];
-  const total = usersQuery.data?.total ?? 0;
-  const error =
-    usersQuery.error instanceof Error ? usersQuery.error.message : null;
-
-  return (
-    <div>
-      <PageHeader title="Users" description={`${total.toLocaleString()} total`} />
-
-      <form
-        className="mb-6 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setQuery(search.trim());
-        }}
-      >
-        <input
-          type="search"
-          placeholder="Search by email or name…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500 focus:outline-none"
-        />
-        <button
-          type="button"
-          onClick={() => downloadExport("/admin/export/users")}
-          className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800"
-        >
-          Export CSV
-        </button>
-      </form>
-
-      {error && <ErrorBanner message={error} />}
-
-      <DataTable>
-        <table className="w-full text-left text-sm">
-          <thead className={tableHeadClass}>
-            <tr>
-              <th className="px-4 py-3 font-medium">Email</th>
-              <th className="px-4 py-3 font-medium">Plan</th>
-              <th className="px-4 py-3 font-medium">Words</th>
-              <th className="px-4 py-3 font-medium">Commands</th>
-              <th className="px-4 py-3 font-medium">Admin</th>
-            </tr>
-          </thead>
-          <tbody>
-            {usersQuery.isLoading && (
-              <tr>
-                <td colSpan={5} className={`${tableCellClass} text-center text-zinc-500`}>
-                  Loading…
-                </td>
-              </tr>
-            )}
-            {!usersQuery.isLoading &&
-              items.map((u) => (
-                <tr key={u.id} className="border-t border-white/5 hover:bg-zinc-800/50">
-                  <td className={tableCellClass}>
-                    <Link
-                      href={`/dashboard/users/${u.id}`}
-                      className="font-medium text-zinc-100 hover:underline"
-                    >
-                      {u.email}
-                    </Link>
-                    {u.name && (
-                      <p className="text-xs text-zinc-500">{u.name}</p>
-                    )}
-                  </td>
-                  <td className={tableCellClass}>
-                    <Badge tone={planTone(u.plan)}>{u.plan}</Badge>
-                  </td>
-                  <td className={`${tableCellClass} text-zinc-400`}>
-                    {u.word_quota_used.toLocaleString()} /{" "}
-                    {u.word_quota_limit.toLocaleString()}
-                  </td>
-                  <td className={`${tableCellClass} text-zinc-400`}>
-                    {u.command_quota_used} / {u.command_quota_limit}
-                  </td>
-                  <td className={tableCellClass}>
-                    {u.is_admin ? (
-                      <Badge tone="primary">Admin</Badge>
-                    ) : (
-                      <span className="text-zinc-600">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            {!usersQuery.isLoading && items.length === 0 && (
-              <tr>
-                <td colSpan={5} className={`${tableCellClass} text-center text-zinc-500`}>
-                  No users found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </DataTable>
-    </div>
-  );
+  return <Suspense fallback={<Loading />}><Users /></Suspense>;
 }

@@ -1,121 +1,48 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchWebhookLog, triggerBackfill } from "@/lib/api";
-import { defaultRange } from "@/components/DateRangePicker";
-import {
-  PageHeader,
-  ErrorBanner,
-  LoadingState,
-  DataTable,
-  tableHeadClass,
-  tableCellClass,
-} from "@/components/ui";
+import { api, fmt } from "@/lib/api";
+import { Card, CardTitle, Empty, ErrorBox, Loading, PageTitle, Pill } from "@/components/ui";
+
+type Webhooks = { items: { event_type: string; error: string | null; processed_at: string | null; created_at: string | null }[] };
+type Audit = { items: { admin: string; action: string; target: string | null; at: string | null }[] };
 
 export default function OpsPage() {
-  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
-  const webhooks = useQuery({
-    queryKey: ["admin-webhooks"],
-    queryFn: () => fetchWebhookLog({ limit: 100 }),
-  });
-
-  const data = webhooks.data;
-  const error = webhooks.error instanceof Error ? webhooks.error.message : null;
-
-  if (error && !data) return <ErrorBanner message={error} />;
-  if (!data) return <LoadingState />;
-
+  const hooks = useQuery({ queryKey: ["webhooks"], queryFn: () => api<Webhooks>("/admin/ops/webhooks?limit=50") });
+  const audit = useQuery({ queryKey: ["audit"], queryFn: () => api<Audit>("/admin/audit?limit=100") });
   return (
-    <div>
-      <PageHeader
-        title="Ops"
-        description="Webhook delivery and analytics rollup backfill."
-      />
-
-      <section className="mb-10 rounded-xl border border-white/10 bg-zinc-900 p-5">
-        <h2 className="text-sm font-semibold text-zinc-100">Analytics backfill</h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Rebuild platform daily rollups for the last 90 days. Use after a deploy or gap.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            const range = defaultRange(90);
-            setBackfillMsg("Backfilling…");
-            triggerBackfill(range.from, range.to)
-              .then((r) =>
-                setBackfillMsg(`Backfilled ${r.days_processed} day(s).`)
-              )
-              .catch((e) =>
-                setBackfillMsg(e instanceof Error ? e.message : "Backfill failed")
-              );
-          }}
-          className="mt-4 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
-        >
-          Backfill last 90 days
-        </button>
-        {backfillMsg && <p className="mt-2 text-xs text-zinc-500">{backfillMsg}</p>}
-      </section>
-
-      <p className="mb-6 text-sm text-zinc-500">
-        {data.total.toLocaleString()} webhook events total · showing latest{" "}
-        {data.items.length}
-      </p>
-
-      <DataTable>
-        <table className="w-full text-left text-sm">
-          <thead className={tableHeadClass}>
-            <tr>
-              <th className="px-4 py-3">Time</th>
-              <th className="px-4 py-3">Provider</th>
-              <th className="px-4 py-3">Event type</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">External ID</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className={`${tableCellClass} text-zinc-500`}>
-                  No webhook events yet.
-                </td>
-              </tr>
-            ) : (
-              data.items.map((e) => (
-                <tr key={e.id} className="border-t border-white/5">
-                  <td className={`${tableCellClass} whitespace-nowrap text-xs text-zinc-500`}>
-                    {e.created_at
-                      ? new Date(e.created_at).toLocaleString()
-                      : "-"}
-                  </td>
-                  <td className={tableCellClass}>{e.provider}</td>
-                  <td className={`${tableCellClass} font-mono text-xs`}>
-                    {e.event_type}
-                  </td>
-                  <td className={tableCellClass}>
-                    {e.error ? (
-                      <span className="text-red-300" title={e.error}>
-                        Error
-                      </span>
-                    ) : e.processed_at ? (
-                      <span className="text-emerald-300">Processed</span>
-                    ) : (
-                      <span className="text-zinc-500">Pending</span>
-                    )}
-                  </td>
-                  <td
-                    className={`${tableCellClass} max-w-[200px] truncate font-mono text-xs text-zinc-500`}
-                    title={e.external_event_id}
-                  >
-                    {e.external_event_id}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </DataTable>
-    </div>
+    <>
+      <PageTitle title="Ops & audit" subtitle="Billing webhooks, and every admin sign-in and change." />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card>
+          <CardTitle>Billing webhooks</CardTitle>
+          {hooks.isLoading ? <Loading /> : hooks.error ? <ErrorBox error={hooks.error} /> : hooks.data?.items.length ? (
+            <div className="divide-y divide-line text-[14px]">
+              {hooks.data.items.map((h, i) => (
+                <div key={i} className="flex items-center gap-3 py-2.5">
+                  <Pill tone={h.error ? "rose" : h.processed_at ? "lime" : "gray"}>{h.error ? "error" : h.processed_at ? "ok" : "pending"}</Pill>
+                  <span className="min-w-0 flex-1 truncate">{h.event_type}</span>
+                  <span className="text-[12px] text-faint">{fmt.ago(h.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          ) : <Empty>No webhooks received.</Empty>}
+        </Card>
+        <Card>
+          <CardTitle>Admin audit log</CardTitle>
+          {audit.isLoading ? <Loading /> : audit.error ? <ErrorBox error={audit.error} /> : audit.data?.items.length ? (
+            <div className="divide-y divide-line text-[14px]">
+              {audit.data.items.map((a, i) => (
+                <div key={i} className="flex items-center gap-3 py-2.5">
+                  <Pill tone={a.action.includes("denied") || a.action.includes("failed") ? "rose" : a.action.startsWith("plan_") ? "peach" : "gray"}>{a.action.replace(/_/g, " ")}</Pill>
+                  <span className="min-w-0 flex-1 truncate text-muted">{a.admin}{a.target ? ` → ${a.target.slice(0, 8)}` : ""}</span>
+                  <span className="text-[12px] text-faint">{fmt.ago(a.at)}</span>
+                </div>
+              ))}
+            </div>
+          ) : <Empty>No admin activity yet.</Empty>}
+        </Card>
+      </div>
+    </>
   );
 }
