@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -38,19 +39,29 @@ export function Delta({ now, before, invert = false }: { now: number; before: nu
   );
 }
 
-export function Stat({ label, value, hint, delta, tone = "plain" }: {
+export function Stat({ label, value, hint, delta, tone = "plain", href }: {
   label: string; value: ReactNode; hint?: ReactNode; delta?: ReactNode; tone?: "plain" | "lime" | "ink";
+  /** Who's behind the number (a filtered Users list). */
+  href?: string;
 }) {
   const tones = { plain: "bg-card", lime: "bg-lime", ink: "bg-ink text-white" };
-  return (
-    <div className={`rounded-[28px] p-6 ${tones[tone]}`}>
+  const body = (
+    <>
       <p className={`text-[13px] ${tone === "ink" ? "text-white/60" : "text-muted"}`}>{label}</p>
       <div className="mt-3 flex items-end gap-2.5">
         <p className="tabular text-[34px] font-semibold leading-none tracking-[-0.02em]">{value}</p>
         {delta}
       </div>
       {hint ? <p className={`mt-3 text-[12px] ${tone === "ink" ? "text-white/50" : "text-muted"}`}>{hint}</p> : null}
-    </div>
+    </>
+  );
+  return href ? (
+    <Link href={href} className={`group block rounded-[28px] p-6 transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] ${tones[tone]}`}>
+      {body}
+      <p className={`mt-2 text-[12px] font-medium opacity-0 transition group-hover:opacity-100 ${tone === "ink" ? "text-white/70" : "text-ink/70"}`}>See who →</p>
+    </Link>
+  ) : (
+    <div className={`rounded-[28px] p-6 ${tones[tone]}`}>{body}</div>
   );
 }
 
@@ -78,21 +89,30 @@ export function planLabel(plan: string): string {
   return { power: "Power", pro: "Pro", pro_trial: "Trial", expired: "No plan", free: "Free" }[plan] ?? plan;
 }
 
-/** Week-style bars: filled where there's data, hatched where it's zero (reference design). */
-export function Bars({ data, height = 150, format = (n: number) => String(n) }: {
+/** Week-style bars: filled where there's data, hatched where it's zero (reference design).
+ *  With `onPick`, a bar with data can be clicked; `popover` then shows above the `picked` bar. */
+export function Bars({ data, height = 150, format = (n: number) => String(n), onPick, picked = null, popover }: {
   data: { label: string; value: number }[]; height?: number; format?: (n: number) => string;
+  onPick?: (index: number) => void; picked?: number | null; popover?: ReactNode;
 }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   const step = Math.max(1, Math.ceil(data.length / 10));
+  const align = (i: number) => (i < data.length / 3 ? "left-0" : i > (2 * data.length) / 3 ? "right-0" : "left-1/2 -translate-x-1/2");
   return (
     <div className="flex items-end gap-1.5" style={{ height: height + 22 }}>
       {data.map((d, i) => (
         <div key={i} className="group relative flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-          <div className="pointer-events-none absolute -top-1 z-10 hidden -translate-y-full whitespace-nowrap rounded-lg bg-ink px-2 py-1 text-[11px] text-white group-hover:block">
-            {d.label}: {format(d.value)}
-          </div>
+          {picked === i && popover ? (
+            <div className={`absolute bottom-full z-20 mb-2 ${align(i)}`}>{popover}</div>
+          ) : (
+            <div className="pointer-events-none absolute -top-1 z-10 hidden -translate-y-full whitespace-nowrap rounded-lg bg-ink px-2 py-1 text-[11px] text-white group-hover:block">
+              {d.label}: {format(d.value)}{onPick && d.value > 0 ? " · click to see who" : ""}
+            </div>
+          )}
           {d.value > 0 ? (
-            <div className="w-full rounded-[10px] bg-sky transition-colors group-hover:bg-ink" style={{ height: Math.max(6, (d.value / max) * height) }} />
+            <button type="button" disabled={!onPick} onClick={() => onPick?.(i)} aria-label={`${d.label}: ${format(d.value)}`}
+              className={`w-full rounded-[10px] transition-colors group-hover:bg-ink ${picked === i ? "bg-ink" : "bg-sky"} ${onPick ? "cursor-pointer" : "cursor-default"}`}
+              style={{ height: Math.max(6, (d.value / max) * height) }} />
           ) : (
             <div className="hatch w-full rounded-[10px]" style={{ height: height * 0.35 }} />
           )}

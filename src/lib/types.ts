@@ -7,7 +7,7 @@ export type Overview = {
   series: { date: string; signups: number; active_users: number; revenue_usd: number }[];
   recent: { event: string; at: string; user_id: string; email: string; name: string | null; plan?: string }[];
 };
-export type FunnelStep = { step: string; users: number; pct: number | null };
+export type FunnelStep = { step: string; segment: string; users: number; pct: number | null };
 export type UserRow = {
   id: string; email: string; name: string | null; avatar_url: string | null; plan: string; plan_name: string;
   trial_status: string; trial_ends_at: string | null; words_mtd: number; actions_mtd: number; cost_30d_usd: number;
