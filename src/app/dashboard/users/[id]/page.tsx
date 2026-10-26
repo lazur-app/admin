@@ -6,6 +6,7 @@ import { api, fmt } from "@/lib/api";
 import type { UserRow } from "@/lib/types";
 import { Bars, Card, CardTitle, Delta, Empty, ErrorBox, Loading, PageTitle, Pill, RangePicker, Stat, planLabel, planTone } from "@/components/ui";
 import { Adoption, BarList, HealthParts, Heatmap, duration } from "@/components/userCharts";
+import { EmailComposer, type Audience } from "@/components/EmailComposer";
 
 type Detail = UserRow & {
   history_storage: string;
@@ -15,6 +16,7 @@ type Detail = UserRow & {
   orders: { amount_usd: number; status: string; reason: string | null; paid_at: string | null; invoice_url: string | null }[];
   cost_30d: { feature: string; calls: number; tokens: number; cost_usd: number }[];
   analytics: Analytics;
+  emails: { kind: string; subject: string; status: string; error: string | null; sent_by: string; app_version: string | null; at: string }[];
 };
 
 type Analytics = {
@@ -49,6 +51,7 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
   const user = useQuery({ queryKey: ["user", id], queryFn: () => api<Detail>(`/admin/users/${id}`) });
   const [notice, setNotice] = useState<string | null>(null);
   const [days, setDays] = useState(30);
+  const [emailing, setEmailing] = useState<Audience | null>(null);
   const action = useMutation({
     mutationFn: (body: Record<string, unknown>) => api(`/admin/users/${id}/plan`, { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => { setNotice("Saved."); qc.invalidateQueries({ queryKey: ["user", id] }); },
@@ -62,8 +65,15 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
 
   return (
     <>
-      <PageTitle title={u.name || u.email.split("@")[0]} subtitle={`${u.email} · joined ${fmt.date(u.created_at)} · last active ${fmt.ago(u.last_active_at)}`}
-        actions={<Pill tone={planTone(u.plan)}>{planLabel(u.plan)}</Pill>} />
+      <PageTitle title={u.name || u.email.split("@")[0]}
+        subtitle={`${u.email} · joined ${fmt.date(u.created_at)} · last active ${fmt.ago(u.last_active_at)} · ${u.app_version ? `app ${u.app_version}` : "app version unknown"}`}
+        actions={
+          <div className="flex items-center gap-2">
+            <Pill tone={planTone(u.plan)}>{planLabel(u.plan)}</Pill>
+            <button type="button" onClick={() => setEmailing({ label: u.name || u.email, userIds: [u.id] })}
+              className="rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-white">Email</button>
+          </div>
+        } />
       <div className="grid gap-5">
         <UserAnalytics u={u} days={days} setDays={setDays} />
 
@@ -135,7 +145,24 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
             ) : <Empty>No payments.</Empty>}
           </Card>
         </div>
+
+        <Card>
+          <CardTitle aside={<span className="text-[13px] text-muted">sent from the admin, newest first</span>}>Emails</CardTitle>
+          {u.emails.length ? (
+            <div className="divide-y divide-line text-[14px]">
+              {u.emails.map((e, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-3 py-2.5">
+                  <Pill tone={e.status === "sent" ? "lime" : "rose"}>{e.status}</Pill>
+                  <span className="min-w-0 flex-1 truncate">{e.subject}</span>
+                  {e.error ? <span className="max-w-[40%] truncate text-[12px] text-red-600" title={e.error}>{e.error}</span> : null}
+                  <span className="text-[12px] text-faint">{e.app_version ? `on ${e.app_version} · ` : ""}{e.sent_by} · {fmt.ago(e.at)}</span>
+                </div>
+              ))}
+            </div>
+          ) : <Empty>No emails sent to this person yet.</Empty>}
+        </Card>
       </div>
+      {emailing ? <EmailComposer audience={emailing} onClose={() => setEmailing(null)} /> : null}
     </>
   );
 }
