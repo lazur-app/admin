@@ -5,9 +5,11 @@ import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api, fmt } from "@/lib/api";
+import { isOlder } from "@/lib/versions";
 import { SEGMENT_GROUPS, SEGMENTS } from "@/lib/segments";
-import type { UserRow } from "@/lib/types";
+import type { AppVersions, UserFilter, UserRow } from "@/lib/types";
 import { Card, ErrorBox, Loading, PageTitle, Pill, planLabel, planTone } from "@/components/ui";
+import { EmailComposer, type Audience } from "@/components/EmailComposer";
 
 type UsersResponse = { total: number; items: UserRow[]; segment: string | null; segment_label: string | null; from: string | null; to: string | null };
 
@@ -24,6 +26,10 @@ function Users() {
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
   const onboarding = params.get("onboarding") ?? "";
+  const version = params.get("version") ?? "";
+  const [emailing, setEmailing] = useState<Audience | null>(null);
+  const versions = useQuery({ queryKey: ["app-versions"], queryFn: () => api<AppVersions>("/admin/app-versions"), staleTime: 60_000 });
+  const latest = versions.data?.latest ?? null;
   const sort = params.get("sort") ?? "last_active";
   const page = Number(params.get("page") ?? 0);
   const [q, setQ] = useState(params.get("q") ?? "");
@@ -61,7 +67,7 @@ function Users() {
   }, [q]);
 
   const query = new URLSearchParams({ limit: String(LIMIT), offset: String(page * LIMIT), sort });
-  for (const [k, v] of Object.entries({ segment, days, from, to, onboarding, q: params.get("q") ?? "" })) if (v) query.set(k, v);
+  for (const [k, v] of Object.entries({ segment, days, from, to, onboarding, version, q: params.get("q") ?? "" })) if (v) query.set(k, v);
   const users = useQuery({
     queryKey: ["users", query.toString()],
     queryFn: () => api<UsersResponse>(`/admin/users?${query}`),
@@ -72,7 +78,26 @@ function Users() {
   const rangeText = data?.from
     ? data.from === data.to ? fmt.date(`${data.from}T00:00:00Z`) : `${fmt.date(`${data.from}T00:00:00Z`)} – ${fmt.date(`${data.to}T00:00:00Z`)}`
     : null;
-  const filtered = Boolean(segment || days || from || onboarding || params.get("q"));
+  const filtered = Boolean(segment || days || from || onboarding || version || params.get("q"));
+
+  /** The current filters, as the email API takes them: a bulk email reaches exactly this list. */
+  const currentFilter = (): UserFilter => {
+    const f: UserFilter = {};
+    const qq = params.get("q")?.trim();
+    if (qq) f.q = qq;
+    if (segment) f.segment = segment;
+    if (from) { f.from = from; f.to = to || from; }
+    else if (days) f.days = Number(days);
+    if (onboarding) f.onboarding = onboarding === "true";
+    if (version) f.version = version;
+    return f;
+  };
+  const versionLabel = version === "older" ? `older than ${latest ?? "the latest"}` : version === "unknown" ? "unknown version" : version;
+  const emailAll = () => {
+    if (!data) return;
+    const label = version ? `everyone on ${versionLabel}` : `these ${fmt.num(data.total)} people`;
+    setEmailing({ label, filter: currentFilter() });
+  };
   const subtitle = data
     ? [`${fmt.num(data.total)} ${data.total === 1 ? "person" : "people"}`, seg?.label ?? (data.from ? "Joined" : null), rangeText].filter(Boolean).join(" · ")
     : undefined;
@@ -127,15 +152,34 @@ function Users() {
           <option value="true">Finished onboarding</option>
           <option value="false">Not finished</option>
         </select>
+        <select value={version} onChange={(e) => set({ version: e.target.value || null })} className={`${control} pr-10`} aria-label="App version">
+          <option value="">Any app version</option>
+          {versions.data ? (
+            <>
+              {latest && versions.data.outdated ? <option value="older">Older than {latest} ({fmt.num(versions.data.outdated)})</option> : null}
+              {versions.data.versions.map((v) => (
+                <option key={v.version} value={v.version}>{v.version}{v.latest ? " (latest)" : ""} · {fmt.num(v.users)}</option>
+              ))}
+              {versions.data.unknown ? <option value="unknown">Unknown version · {fmt.num(versions.data.unknown)}</option> : null}
+            </>
+          ) : version ? <option value={version}>{version}</option> : null}
+        </select>
         <select value={sort} onChange={(e) => set({ sort: e.target.value === "last_active" ? null : e.target.value })} className={`${control} pr-10`} aria-label="Sort">
           <option value="last_active">Last active first</option>
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
         </select>
         {data?.items.length ? (
-          <button type="button" onClick={copyEmails} className="ml-auto rounded-full bg-card px-4 py-2 text-[13px] text-muted hover:text-ink">
-            Copy {data.items.length} emails
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button type="button" onClick={copyEmails} className="rounded-full bg-card px-4 py-2 text-[13px] text-muted hover:text-ink">
+              Copy {data.items.length} emails
+            </button>
+            {filtered ? (
+              <button type="button" onClick={emailAll} className="rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-white">
+                Email all {fmt.num(data.total)}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -144,10 +188,10 @@ function Users() {
           {data.items.length === 0 ? (
             <p className="px-6 py-10 text-center text-[14px] text-muted">No one matches these filters.</p>
           ) : (
-            <table className="w-full min-w-[900px] text-[14px]">
+            <table className="w-full min-w-[1080px] text-[14px]">
               <thead>
                 <tr className="text-left text-[12px] text-muted">
-                  {["Person", "Plan", "Words (month)", "AI actions (month)", "AI cost (30d)", "Onboarding", "Last active", "Joined"].map((h) => (
+                  {["Person", "Plan", "App", "Words (month)", "AI actions (month)", "AI cost (30d)", "Onboarding", "Last active", "Joined", ""].map((h) => (
                     <th key={h} className="bg-surface px-5 py-3.5 font-medium first:rounded-tl-[28px] last:rounded-tr-[28px]">{h}</th>
                   ))}
                 </tr>
@@ -166,12 +210,20 @@ function Users() {
                     </td>
                     <td className="px-5 py-3.5"><Pill tone={planTone(u.plan)}>{planLabel(u.plan)}</Pill>
                       {u.plan === "pro_trial" && u.trial_ends_at ? <span className="ml-2 text-[12px] text-muted">ends {fmt.date(u.trial_ends_at)}</span> : null}</td>
+                    <td className="px-5 py-3.5">
+                      {u.app_version ? <Pill tone={latest && isOlder(u.app_version, latest) ? "peach" : "gray"}>{u.app_version}</Pill> : <span className="text-faint">–</span>}
+                      {u.last_emailed_at ? <span className="mt-1 block text-[11px] text-faint">emailed {fmt.ago(u.last_emailed_at)}</span> : null}
+                    </td>
                     <td className="tabular px-5 py-3.5">{fmt.num(u.words_mtd)}</td>
                     <td className="tabular px-5 py-3.5">{fmt.num(u.actions_mtd)}</td>
                     <td className="tabular px-5 py-3.5">{fmt.usd(u.cost_30d_usd, 2)}</td>
                     <td className="px-5 py-3.5">{u.onboarding_completed ? <Pill tone="lime">Done</Pill> : <Pill>Not yet</Pill>}</td>
                     <td className="px-5 py-3.5 text-muted">{fmt.ago(u.last_active_at)}</td>
                     <td className="px-5 py-3.5 text-muted">{fmt.date(u.created_at)}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button type="button" onClick={() => setEmailing({ label: u.name || u.email, userIds: [u.id] })}
+                        className="rounded-full bg-surface px-3.5 py-1.5 text-[12px] font-medium text-muted hover:text-ink">Email</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -186,6 +238,7 @@ function Users() {
           ) : null}
         </Card>
       ) : null}
+      {emailing ? <EmailComposer audience={emailing} initialKind={version || emailing.userIds ? "app_update" : "custom"} onClose={() => setEmailing(null)} /> : null}
     </>
   );
 }
