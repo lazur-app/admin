@@ -90,7 +90,7 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
               </dl>
             ) : <Empty>No subscription yet. Trial starts when they open the app.</Empty>}
             <div className="mt-5 flex flex-wrap gap-2">
-              <button onClick={() => action.mutate({ action: "extend_trial", days: 7 })} className="rounded-full bg-sky px-4 py-2 text-[13px] font-medium">+7 days trial</button>
+              <button onClick={() => action.mutate({ action: "extend_trial", days: 3 })} className="rounded-full bg-sky px-4 py-2 text-[13px] font-medium">+3 days trial</button>
               <button onClick={() => action.mutate({ action: "grant_comp", plan: "pro", reason: "admin" })} className="rounded-full bg-lime px-4 py-2 text-[13px] font-medium">Give Pro free</button>
               <button onClick={() => action.mutate({ action: "grant_comp", plan: "power", reason: "admin" })} className="rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-white">Give Power free</button>
               {comp ? <button onClick={() => action.mutate({ action: "revoke_comp" })} className="rounded-full bg-rose px-4 py-2 text-[13px] font-medium">Remove free plan</button> : null}
