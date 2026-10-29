@@ -3,13 +3,34 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, fmt } from "@/lib/api";
-import { Card, CardTitle, Empty, ErrorBox, Loading, PageTitle, RangePicker, Stat } from "@/components/ui";
+import { Card, CardTitle, Empty, ErrorBox, Loading, PageTitle, Pill, RangePicker, Stat } from "@/components/ui";
 
 type Item = { label: string; count: number; users?: number };
 type Gaps = {
-  capability_gaps: Item[]; failed_actions: Item[]; limits: Item[]; errors: Item[];
+  capability_gaps: Item[]; failed_actions: Item[]; limits: Item[]; errors: AppError[];
   retries: number; commands: number; jobs: Record<string, number>; job_failures: Item[];
 };
+
+type AppError = { label: string; component: string; count: number; users: number; last_at: string | null; app_version: string | null };
+
+/** App errors by message: what broke, where, how often, for how many people, last seen. */
+function Errors({ items }: { items: AppError[] }) {
+  if (!items.length) return <Empty>No errors reported by the app.</Empty>;
+  return (
+    <div className="divide-y divide-line">
+      {items.map((e, i) => (
+        <div key={i} className="flex items-start gap-3 py-2.5">
+          <Pill tone={e.component === "promise" ? "peach" : "rose"}>{e.component}</Pill>
+          <code className="min-w-0 flex-1 break-words font-mono text-[12.5px] leading-relaxed">{e.label}</code>
+          <span className="shrink-0 text-right text-[12px] text-muted">
+            <span className="tabular font-semibold text-ink">{e.count}</span> times · {e.users} people
+            <br />last {fmt.ago(e.last_at)}{e.app_version ? ` · ${e.app_version}` : ""}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function Ranked({ items, empty, unit = "times" }: { items: Item[]; empty: string; unit?: string }) {
   if (!items.length) return <Empty>{empty}</Empty>;
@@ -53,7 +74,7 @@ export default function GapsPage() {
               <Card><CardTitle>Actions that failed</CardTitle><Ranked items={d.failed_actions} empty="No failed actions." /></Card>
               <Card><CardTitle>Limits hit</CardTitle><Ranked items={d.limits} empty="Nobody hit a limit." /></Card>
             </div>
-            <Card><CardTitle>App errors</CardTitle><Ranked items={d.errors} empty="No errors reported by the app." /></Card>
+            <Card><CardTitle aside={<span className="text-[13px] text-muted">by message, most frequent first</span>}>App errors</CardTitle><Errors items={d.errors} /></Card>
           </div>
         );
       })()}
