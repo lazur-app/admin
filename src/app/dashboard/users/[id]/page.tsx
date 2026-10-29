@@ -4,9 +4,10 @@ import { use, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, fmt } from "@/lib/api";
 import type { UserRow } from "@/lib/types";
-import { Bars, Card, CardTitle, Delta, Empty, ErrorBox, Loading, PageTitle, Pill, RangePicker, Stat, planLabel, planTone } from "@/components/ui";
+import { Card, CardTitle, Delta, Empty, ErrorBox, Loading, PageTitle, Pill, RangePicker, Stat, planLabel, planTone } from "@/components/ui";
 import { Adoption, BarList, HealthParts, Heatmap, duration } from "@/components/userCharts";
 import { EmailComposer, type Audience } from "@/components/EmailComposer";
+import { UserTrends, type DayPoint } from "@/components/userTrends";
 
 type Detail = UserRow & {
   history_storage: string;
@@ -20,7 +21,7 @@ type Detail = UserRow & {
 };
 
 type Analytics = {
-  series: { date: string; words: number; dictations: number; actions: number; jobs: number; cost_usd: number }[];
+  series: DayPoint[];
   hours: { at: string; count: number }[];
   kpis: {
     active_days_30: number; active_days_prev_30: number; days_idle: number | null;
@@ -172,8 +173,6 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
 function UserAnalytics({ u, days, setDays }: { u: Detail; days: number; setDays: (d: number) => void }) {
   const a = u.analytics;
   const k = a.kpis;
-  const range = a.series.slice(-days);
-  const day = (d: string) => fmt.date(`${d}T00:00:00`);
   const idle = k.days_idle == null ? "never used" : k.days_idle === 0 ? "used today" : `last used ${k.days_idle}d ago`;
   return (
     <>
@@ -197,23 +196,14 @@ function UserAnalytics({ u, days, setDays }: { u: Detail; days: number; setDays:
         <Stat label="Upgrade intent" value={`${k.upgrade_cards} → ${k.upgrade_clicks} → ${k.checkouts}`} hint="upgrade cards seen → clicked → checkouts started" />
       </div>
 
-      <Card>
-        <CardTitle aside={<RangePicker value={days} onChange={setDays} />}>Usage over time</CardTitle>
-        <div className="grid gap-8 xl:grid-cols-3">
-          <div>
-            <p className="mb-3 text-[13px] text-muted">Words dictated per day · {fmt.num(range.reduce((n, d) => n + d.words, 0))} total</p>
-            <Bars height={120} data={range.map((d) => ({ label: day(d.date), value: d.words }))} />
-          </div>
-          <div>
-            <p className="mb-3 text-[13px] text-muted">AI actions per day · {fmt.num(range.reduce((n, d) => n + d.actions, 0))} total</p>
-            <Bars height={120} data={range.map((d) => ({ label: day(d.date), value: d.actions }))} />
-          </div>
-          <div>
-            <p className="mb-3 text-[13px] text-muted">AI cost per day · {fmt.usd(range.reduce((n, d) => n + d.cost_usd, 0), 2)} total</p>
-            <Bars height={120} format={(n) => fmt.usd(n, 3)} data={range.map((d) => ({ label: day(d.date), value: d.cost_usd }))} />
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <div>
+          <h2 className="text-[22px] font-semibold tracking-tight">Usage over time</h2>
+          <p className="text-[13px] text-muted">Per day, so usage and cost line up. Hover any chart for exact numbers.</p>
         </div>
-      </Card>
+        <RangePicker value={days} onChange={setDays} />
+      </div>
+      <UserTrends series={a.series} hours={a.hours} days={days} />
 
       <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
         <Card>
@@ -256,7 +246,7 @@ type Bonus = {
   history: { id: string; entry: "grant" | "remove"; amount: number; reason: string | null; by: string; at: string }[];
 };
 
-const BONUS_PRESETS = [20, 50, 100];
+const BONUS_PRESETS = [10, 20, 50, 100];
 
 /** Extra AI actions on top of the plan. Plan actions are used first; bonus never expires. */
 function BonusActions({ id }: { id: string }) {
@@ -264,68 +254,92 @@ function BonusActions({ id }: { id: string }) {
   const bonus = useQuery({ queryKey: ["bonus", id], queryFn: () => api<Bonus>(`/admin/users/${id}/bonus`) });
   const [amount, setAmount] = useState(50);
   const [reason, setReason] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const change = useMutation({
     mutationFn: (delta: number) => api<Bonus>(`/admin/users/${id}/bonus`, { method: "POST", body: JSON.stringify({ amount: delta, reason: reason.trim() }) }),
     onSuccess: (data, delta) => {
       qc.setQueryData(["bonus", id], data);
       qc.invalidateQueries({ queryKey: ["user", id] });
-      setNotice(delta > 0 ? `Gave ${delta} bonus AI actions.` : `Removed ${-delta} bonus AI actions.`);
+      setNotice({ ok: true, text: delta > 0 ? `Gave ${delta} bonus AI actions.` : `Took back ${-delta} unused bonus AI actions.` });
       setReason("");
     },
-    onError: (e) => setNotice(e instanceof Error ? e.message : "Failed"),
+    onError: (e) => setNotice({ ok: false, text: e instanceof Error ? e.message : "Failed" }),
   });
 
   const b = bonus.data;
   const valid = amount >= 1 && amount <= 5000 && reason.trim().length > 0;
-  const field = "rounded-2xl bg-surface px-4 py-2.5 text-[14px] outline-none placeholder:text-faint";
 
   return (
     <Card>
-      <CardTitle aside={<span className="text-[13px] text-muted">used after the plan runs out · never expire</span>}>Bonus AI actions</CardTitle>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[19px] font-semibold tracking-tight">Bonus AI actions</h2>
+          <p className="mt-1 text-[13px] text-muted">Extra actions on top of their plan. Used only after the plan runs out, and they never expire.</p>
+        </div>
+        {b?.available ? <Pill tone={b.balance ? "lime" : "gray"}>{fmt.num(b.balance)} bonus left</Pill> : null}
+      </div>
       {bonus.isLoading ? <Loading /> : bonus.error || !b ? <ErrorBox error={bonus.error} /> : !b.available ? (
         <Empty>Bonus credits need migration 028 on the database.</Empty>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
-          <div>
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_1fr]">
+          <div className="space-y-5">
+            <PeriodMeter b={b} />
             <div className="grid grid-cols-3 gap-3">
-              <Stat label="This period" value={`${fmt.num(b.used_this_period)} / ${fmt.num(b.limit_with_bonus)}`}
-                hint={`${fmt.num(b.plan_limit)} plan${b.bonus_used_this_period ? ` · ${fmt.num(b.bonus_used_this_period)} from bonus` : ""}`} />
-              <Stat label="Bonus left" value={fmt.num(b.balance)} tone={b.balance ? "lime" : "plain"} />
-              <Stat label="Bonus used" value={fmt.num(b.used)} hint={`of ${fmt.num(b.granted)} given`} />
+              <MiniStat label="Given, all time" value={fmt.num(b.granted)} />
+              <MiniStat label="Used from bonus" value={fmt.num(b.used)} />
+              <MiniStat label="Taken back" value={fmt.num(b.removed)} />
             </div>
-            {b.applies === false ? <p className="mt-3 text-[13px] text-muted">Their trial or plan isn&apos;t active, so bonus actions won&apos;t be used until it is.</p> : null}
-
-            <div className="mt-5 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {BONUS_PRESETS.map((n) => (
-                  <button key={n} type="button" onClick={() => setAmount(n)}
-                    className={`rounded-full px-4 py-2 text-[13px] font-medium ${amount === n ? "bg-ink text-white" : "bg-surface"}`}>+{n}</button>
-                ))}
-                <input type="number" min={1} max={5000} value={amount} onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                  className={`${field} w-28 tabular`} aria-label="Amount" />
-              </div>
-              <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300}
-                placeholder="Why (saved with the grant), e.g. ran out testing background jobs" className={`${field} w-full`} />
-              <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={!valid || change.isPending} onClick={() => change.mutate(amount)}
-                  className="rounded-full bg-lime px-4 py-2 text-[13px] font-medium disabled:opacity-40">Give {amount || ""} AI actions</button>
-                <button type="button" disabled={!valid || change.isPending || b.balance < 1} onClick={() => change.mutate(-Math.min(amount, b.balance))}
-                  className="rounded-full bg-surface px-4 py-2 text-[13px] font-medium disabled:opacity-40">Remove {Math.min(amount, b.balance) || ""} unused</button>
-              </div>
-              {notice ? <p className="text-[13px] text-muted">{notice}</p> : null}
-            </div>
+            {b.applies === false ? (
+              <p className="rounded-2xl bg-peach/30 px-4 py-3 text-[13px]">Their trial or plan isn&apos;t active, so bonus actions won&apos;t be used until it is.</p>
+            ) : null}
           </div>
 
-          <div>
+          <div className="rounded-[22px] bg-surface p-5">
+            <p className="text-[13px] font-medium">Give AI actions</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {BONUS_PRESETS.map((n) => (
+                <button key={n} type="button" onClick={() => setAmount(n)}
+                  className={`h-10 min-w-14 rounded-full px-4 text-[14px] font-semibold tabular transition ${amount === n ? "bg-ink text-white" : "bg-card hover:bg-white"}`}>+{n}</button>
+              ))}
+              <div className="flex h-10 items-center rounded-full bg-card pl-1 pr-1">
+                <button type="button" aria-label="Less" onClick={() => setAmount((a) => Math.max(1, a - 5))} className="h-8 w-8 rounded-full text-[16px] text-muted hover:bg-surface">−</button>
+                <input type="number" min={1} max={5000} value={amount} aria-label="Amount"
+                  onChange={(e) => setAmount(Math.min(5000, Math.max(0, Math.floor(Number(e.target.value) || 0))))}
+                  className="w-14 bg-transparent text-center text-[14px] font-semibold tabular outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                <button type="button" aria-label="More" onClick={() => setAmount((a) => Math.min(5000, a + 5))} className="h-8 w-8 rounded-full text-[16px] text-muted hover:bg-surface">+</button>
+              </div>
+            </div>
+            <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300}
+              placeholder="Reason (saved with it), e.g. ran out testing background jobs"
+              className="mt-3 w-full rounded-2xl bg-card px-4 py-3 text-[14px] outline-none placeholder:text-faint" />
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" disabled={!valid || change.isPending} onClick={() => change.mutate(amount)}
+                className="h-10 rounded-full bg-lime px-5 text-[14px] font-semibold text-lime-ink transition disabled:opacity-40">
+                {change.isPending ? "Saving…" : `Give ${fmt.num(amount)} AI actions`}
+              </button>
+              <button type="button" disabled={!valid || change.isPending || b.balance < 1} onClick={() => change.mutate(-Math.min(amount, b.balance))}
+                className="h-10 rounded-full px-4 text-[13px] font-medium text-muted transition hover:bg-card hover:text-ink disabled:opacity-40">
+                Take back {fmt.num(Math.min(amount, b.balance))} unused
+              </button>
+            </div>
+            {!reason.trim() ? <p className="mt-2 text-[12px] text-faint">Add a reason to enable the buttons.</p> : null}
+            {notice ? <p className={`mt-2 text-[13px] ${notice.ok ? "text-lime-ink" : "text-red-600"}`}>{notice.text}</p> : null}
+          </div>
+
+          <div className="xl:col-span-2">
             <p className="mb-2 text-[13px] font-medium text-muted">History</p>
             {b.history.length ? (
-              <div className="max-h-[300px] divide-y divide-line overflow-y-auto pr-1 text-[14px]">
+              <div className="max-h-[280px] divide-y divide-line overflow-y-auto rounded-[22px] border border-line pr-1">
                 {b.history.map((h) => (
-                  <div key={h.id} className="flex items-center gap-3 py-2.5">
-                    <Pill tone={h.entry === "grant" ? "lime" : "rose"}>{h.amount > 0 ? `+${h.amount}` : h.amount}</Pill>
-                    <span className="min-w-0 flex-1 truncate" title={h.reason ?? ""}>{h.reason || "–"}</span>
-                    <span className="shrink-0 text-[12px] text-faint">{h.by} · {fmt.date(h.at)}</span>
+                  <div key={h.id} className="flex items-center gap-4 px-4 py-3 text-[14px]">
+                    <span className={`grid h-9 min-w-14 place-items-center rounded-full px-3 text-[13px] font-semibold tabular ${h.entry === "grant" ? "bg-lime text-lime-ink" : "bg-rose/40"}`}>
+                      {h.amount > 0 ? `+${h.amount}` : h.amount}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium" title={h.reason ?? ""}>{h.reason || "No reason given"}</span>
+                      <span className="block text-[12px] text-faint">{h.entry === "grant" ? "Given" : "Taken back"} by {h.by}</span>
+                    </span>
+                    <span className="shrink-0 text-[12px] text-muted">{fmt.date(h.at)} · {fmt.ago(h.at)}</span>
                   </div>
                 ))}
               </div>
@@ -334,5 +348,47 @@ function BonusActions({ id }: { id: string }) {
         </div>
       )}
     </Card>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-surface px-4 py-3">
+      <p className="text-[12px] text-muted">{label}</p>
+      <p className="mt-0.5 text-[20px] font-semibold tracking-tight tabular">{value}</p>
+    </div>
+  );
+}
+
+/** This billing period as one bar: plan actions used, bonus used, bonus still available. */
+function PeriodMeter({ b }: { b: Bonus }) {
+  const total = Math.max(1, b.limit_with_bonus, b.used_this_period);
+  const planUsed = Math.min(b.plan_limit, b.used_this_period - b.bonus_used_this_period);
+  const planLeft = Math.max(0, b.plan_limit - planUsed);
+  const pct = (n: number) => `${(100 * n) / total}%`;
+  const left = Math.max(0, b.limit_with_bonus - b.used_this_period);
+  return (
+    <div className="rounded-[22px] bg-ink p-5 text-white">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[12px] text-white/50">This period{b.period_end ? ` · resets ${fmt.date(b.period_end)}` : ""}</p>
+          <p className="mt-1 text-[34px] font-semibold leading-none tracking-tight tabular">
+            {fmt.num(b.used_this_period)}<span className="text-white/40"> / {fmt.num(b.limit_with_bonus)}</span>
+          </p>
+        </div>
+        <p className="text-right text-[13px] text-white/60"><b className="text-white">{fmt.num(left)}</b> left</p>
+      </div>
+      <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-white/10">
+        <span className="h-full bg-white" style={{ width: pct(planUsed) }} />
+        <span className="h-full bg-white/25" style={{ width: pct(planLeft) }} />
+        <span className="h-full bg-lime" style={{ width: pct(b.bonus_used_this_period) }} />
+        <span className="h-full bg-lime/35" style={{ width: pct(b.balance) }} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-white/60">
+        <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-white" />Plan used {fmt.num(planUsed)} of {fmt.num(b.plan_limit)}</span>
+        <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-lime" />Bonus used {fmt.num(b.bonus_used_this_period)}</span>
+        <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-lime/35" />Bonus left {fmt.num(b.balance)}</span>
+      </div>
+    </div>
   );
 }
