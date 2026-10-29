@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { featureLabel } from "@/lib/features";
 import { api, fmt } from "@/lib/api";
 import { Bars, Card, CardTitle, Empty, ErrorBox, Loading, PageTitle, RangePicker, Stat } from "@/components/ui";
 
@@ -14,7 +15,6 @@ type Costs = {
   top_users: (Row & { user_id: string; email: string })[];
 };
 
-const FEATURE: Record<string, string> = { command: "Commands", guide_step: "Guide steps", agent_task: "Background jobs", task_notification: "Job updates", onboarding: "Onboarding" };
 
 export default function CostsPage() {
   const [days, setDays] = useState(30);
@@ -43,7 +43,7 @@ export default function CostsPage() {
               <CardTitle>By feature</CardTitle>
               {q.data.by_feature.length ? q.data.by_feature.map((r) => (
                 <div key={r.feature} className="flex items-center justify-between border-b border-line py-2.5 text-[14px] last:border-0">
-                  <span>{FEATURE[r.feature] ?? r.feature}</span>
+                  <span>{featureLabel(r.feature)}</span>
                   <span className="text-right"><span className="tabular font-semibold">{fmt.usd(r.cost_usd, 3)}</span><span className="ml-2 text-[12px] text-muted">{fmt.num(r.calls)} calls</span></span>
                 </div>
               )) : <Empty>No model calls.</Empty>}

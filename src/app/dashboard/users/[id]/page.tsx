@@ -8,6 +8,7 @@ import { Card, CardTitle, Delta, Empty, ErrorBox, Loading, PageTitle, Pill, Rang
 import { Adoption, BarList, HealthParts, Heatmap, duration } from "@/components/userCharts";
 import { EmailComposer, type Audience } from "@/components/EmailComposer";
 import { UserTrends, type DayPoint } from "@/components/userTrends";
+import { UserCosts } from "@/components/UserCosts";
 
 type Detail = UserRow & {
   history_storage: string;
@@ -115,6 +116,8 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
           </Card>
         </div>
 
+        <UserCosts id={id} />
+
         <BonusActions id={id} />
 
         <div className="grid gap-5 xl:grid-cols-2">
@@ -216,7 +219,7 @@ function UserAnalytics({ u, days, setDays }: { u: Detail; days: number; setDays:
         </Card>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-3">
+      <div className="grid gap-5 xl:grid-cols-2">
         <Card>
           <CardTitle>Feature adoption</CardTitle>
           <Adoption steps={a.adoption} />
@@ -227,12 +230,7 @@ function UserAnalytics({ u, days, setDays }: { u: Detail; days: number; setDays:
             ? <BarList items={a.tools.map((t) => ({ label: t.tool.replace(/_/g, " "), value: t.count }))} />
             : <Empty>No tool use yet.</Empty>}
         </Card>
-        <Card>
-          <CardTitle aside={<span className="text-[13px] text-muted">last 30 days</span>}>AI cost by feature</CardTitle>
-          {u.cost_30d.length
-            ? <BarList format={(n) => fmt.usd(n, 3)} items={[...u.cost_30d].sort((x, y) => y.cost_usd - x.cost_usd).map((c) => ({ label: `${c.feature.replace(/_/g, " ")} · ${fmt.num(c.calls)} calls`, value: c.cost_usd }))} />
-            : <Empty>No model calls.</Empty>}
-        </Card>
+
       </div>
     </>
   );
