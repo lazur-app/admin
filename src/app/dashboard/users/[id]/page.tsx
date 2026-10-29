@@ -114,6 +114,8 @@ export default function UserPage({ params }: { params: Promise<{ id: string }> }
           </Card>
         </div>
 
+        <BonusActions id={id} />
+
         <div className="grid gap-5 xl:grid-cols-2">
           <Card>
             <CardTitle>Background jobs</CardTitle>
@@ -243,5 +245,94 @@ function UserAnalytics({ u, days, setDays }: { u: Detail; days: number; setDays:
         </Card>
       </div>
     </>
+  );
+}
+
+
+type Bonus = {
+  available: boolean; applies?: boolean; balance: number; granted: number; removed: number; used: number;
+  plan: string; plan_limit: number; used_this_period: number; limit_with_bonus: number; bonus_used_this_period: number;
+  period_start: string | null; period_end: string | null;
+  history: { id: string; entry: "grant" | "remove"; amount: number; reason: string | null; by: string; at: string }[];
+};
+
+const BONUS_PRESETS = [20, 50, 100];
+
+/** Extra AI actions on top of the plan. Plan actions are used first; bonus never expires. */
+function BonusActions({ id }: { id: string }) {
+  const qc = useQueryClient();
+  const bonus = useQuery({ queryKey: ["bonus", id], queryFn: () => api<Bonus>(`/admin/users/${id}/bonus`) });
+  const [amount, setAmount] = useState(50);
+  const [reason, setReason] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const change = useMutation({
+    mutationFn: (delta: number) => api<Bonus>(`/admin/users/${id}/bonus`, { method: "POST", body: JSON.stringify({ amount: delta, reason: reason.trim() }) }),
+    onSuccess: (data, delta) => {
+      qc.setQueryData(["bonus", id], data);
+      qc.invalidateQueries({ queryKey: ["user", id] });
+      setNotice(delta > 0 ? `Gave ${delta} bonus AI actions.` : `Removed ${-delta} bonus AI actions.`);
+      setReason("");
+    },
+    onError: (e) => setNotice(e instanceof Error ? e.message : "Failed"),
+  });
+
+  const b = bonus.data;
+  const valid = amount >= 1 && amount <= 5000 && reason.trim().length > 0;
+  const field = "rounded-2xl bg-surface px-4 py-2.5 text-[14px] outline-none placeholder:text-faint";
+
+  return (
+    <Card>
+      <CardTitle aside={<span className="text-[13px] text-muted">used after the plan runs out · never expire</span>}>Bonus AI actions</CardTitle>
+      {bonus.isLoading ? <Loading /> : bonus.error || !b ? <ErrorBox error={bonus.error} /> : !b.available ? (
+        <Empty>Bonus credits need migration 028 on the database.</Empty>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[1fr_1.2fr]">
+          <div>
+            <div className="grid grid-cols-3 gap-3">
+              <Stat label="This period" value={`${fmt.num(b.used_this_period)} / ${fmt.num(b.limit_with_bonus)}`}
+                hint={`${fmt.num(b.plan_limit)} plan${b.bonus_used_this_period ? ` · ${fmt.num(b.bonus_used_this_period)} from bonus` : ""}`} />
+              <Stat label="Bonus left" value={fmt.num(b.balance)} tone={b.balance ? "lime" : "plain"} />
+              <Stat label="Bonus used" value={fmt.num(b.used)} hint={`of ${fmt.num(b.granted)} given`} />
+            </div>
+            {b.applies === false ? <p className="mt-3 text-[13px] text-muted">Their trial or plan isn&apos;t active, so bonus actions won&apos;t be used until it is.</p> : null}
+
+            <div className="mt-5 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {BONUS_PRESETS.map((n) => (
+                  <button key={n} type="button" onClick={() => setAmount(n)}
+                    className={`rounded-full px-4 py-2 text-[13px] font-medium ${amount === n ? "bg-ink text-white" : "bg-surface"}`}>+{n}</button>
+                ))}
+                <input type="number" min={1} max={5000} value={amount} onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                  className={`${field} w-28 tabular`} aria-label="Amount" />
+              </div>
+              <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300}
+                placeholder="Why (saved with the grant), e.g. ran out testing background jobs" className={`${field} w-full`} />
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={!valid || change.isPending} onClick={() => change.mutate(amount)}
+                  className="rounded-full bg-lime px-4 py-2 text-[13px] font-medium disabled:opacity-40">Give {amount || ""} AI actions</button>
+                <button type="button" disabled={!valid || change.isPending || b.balance < 1} onClick={() => change.mutate(-Math.min(amount, b.balance))}
+                  className="rounded-full bg-surface px-4 py-2 text-[13px] font-medium disabled:opacity-40">Remove {Math.min(amount, b.balance) || ""} unused</button>
+              </div>
+              {notice ? <p className="text-[13px] text-muted">{notice}</p> : null}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-[13px] font-medium text-muted">History</p>
+            {b.history.length ? (
+              <div className="max-h-[300px] divide-y divide-line overflow-y-auto pr-1 text-[14px]">
+                {b.history.map((h) => (
+                  <div key={h.id} className="flex items-center gap-3 py-2.5">
+                    <Pill tone={h.entry === "grant" ? "lime" : "rose"}>{h.amount > 0 ? `+${h.amount}` : h.amount}</Pill>
+                    <span className="min-w-0 flex-1 truncate" title={h.reason ?? ""}>{h.reason || "–"}</span>
+                    <span className="shrink-0 text-[12px] text-faint">{h.by} · {fmt.date(h.at)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <Empty>No bonus AI actions given yet.</Empty>}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

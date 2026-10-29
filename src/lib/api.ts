@@ -46,14 +46,20 @@ export class ApiError extends Error {
 
 export async function api<T>(path: string, init?: RequestInit & { token?: string }): Promise<T> {
   const token = init?.token ?? getSession();
-  const res = await fetch(`${apiBase()}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    // The browser hides why (offline, API down, or a response without CORS headers).
+    throw new ApiError(0, "Couldn't reach the API. Check your connection or try again in a minute.");
+  }
   if (res.status === 401) {
     clearSession();
     if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login") && !window.location.pathname.startsWith("/auth")) {
