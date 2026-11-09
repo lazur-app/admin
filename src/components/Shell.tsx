@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BadgeDollarSign, Cpu, Download, LayoutGrid, LogOut, MessageSquareWarning, Radar, ScrollText, Search, Users } from "lucide-react";
+import { BadgeDollarSign, Cpu, Download, Globe, LayoutGrid, LogOut, MessageSquareWarning, Radar, ScrollText, Search, Users } from "lucide-react";
 import { api, clearSession, getSession } from "@/lib/api";
 
 const NAV = [
@@ -13,6 +13,7 @@ const NAV = [
   { href: "/dashboard/versions", label: "App versions", icon: Download },
   { href: "/dashboard/revenue", label: "Revenue", icon: BadgeDollarSign },
   { href: "/dashboard/costs", label: "Cost & margin", icon: Cpu },
+  { href: "/dashboard/seo", label: "SEO pages", icon: Globe },
   { href: "/dashboard/gaps", label: "Where we fall short", icon: Radar },
   { href: "/dashboard/feedback", label: "Feedback", icon: MessageSquareWarning },
   { href: "/dashboard/ops", label: "Ops & audit", icon: ScrollText },
