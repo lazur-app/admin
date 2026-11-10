@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { api, ApiError, fmt } from "@/lib/api";
 import {
   SEO_TYPES, STATUS_LABEL, typeColor, typeLabel,
@@ -19,6 +19,8 @@ const LIMIT = 50;
 const pct = (part: number, whole: number) => (whole ? Math.round((1000 * part) / whole) / 10 : null);
 const usd = (n: number | null | undefined) => fmt.usd(n, n != null && n < 1 ? 3 : 2);
 const pos = (n: number | null | undefined) => (n == null ? "–" : n.toFixed(1));
+/** Publish dates are calendar days ("2026-11-09"); read them as local midnight, not UTC. */
+const day = (d: string | null) => fmt.date(d && d.length === 10 ? `${d}T00:00:00` : d);
 
 export default function SeoPage() {
   const [days, setDays] = useState(30);
@@ -27,10 +29,26 @@ export default function SeoPage() {
     queryFn: () => api<SeoOverview>(`/admin/seo/overview?days=${days}`),
     retry: (n, e) => !(e instanceof ApiError && e.status === 404) && n < 1,
   });
+  const client = useQueryClient();
+  const sync = useMutation({
+    mutationFn: () => api<{ started: boolean }>("/admin/seo/sync", { method: "POST" }),
+    // The job runs in the background (inspections take minutes); refresh what's there after a bit.
+    onSuccess: () => setTimeout(() => void client.invalidateQueries({ queryKey: ["seo-pages"] }), 20_000),
+  });
   return (
     <>
       <PageTitle title="SEO pages" subtitle="Programmatic pages on lazur.app: how many, what kind, and whether Google has indexed them."
-        actions={<RangePicker value={days} onChange={setDays} />} />
+        actions={
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => sync.mutate()} disabled={sync.isPending || sync.isSuccess}
+              title="Fetch the page list and Search Console data now (the job also runs daily at 10:15 UTC)"
+              className="flex items-center gap-2 rounded-full bg-card px-4 py-2.5 text-[13px] font-medium text-muted transition hover:text-ink disabled:opacity-60">
+              <RefreshCw className={`h-3.5 w-3.5 ${sync.isPending ? "animate-spin" : ""}`} />
+              {sync.isSuccess ? "Syncing, check back in a few minutes" : sync.isError ? "Sync failed, try again" : "Sync now"}
+            </button>
+            <RangePicker value={days} onChange={setDays} />
+          </div>
+        } />
       {q.isLoading ? <Loading /> : q.error instanceof ApiError && q.error.status === 404 ? (
         <Card>
           <CardTitle>Not set up yet</CardTitle>
@@ -248,7 +266,7 @@ function PageTable({ types, gsc }: { types: string[]; gsc: boolean }) {
                         <span className="flex items-center gap-1 truncate text-[12px] text-muted">{p.path}<ExternalLink className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100" /></span>
                       </a>
                     </td>
-                    <td className="whitespace-nowrap py-2.5 pr-3 text-muted">{fmt.date(p.published_at)}</td>
+                    <td className="whitespace-nowrap py-2.5 pr-3 text-muted">{day(p.published_at)}</td>
                     <td className="py-2.5 pr-3">
                       {gsc ? (
                         <>
