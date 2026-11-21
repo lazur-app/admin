@@ -240,7 +240,8 @@ function UserAnalytics({ u, days, setDays }: { u: Detail; days: number; setDays:
 type Budget = {
   available: boolean; applies?: boolean; plan: string; plan_slug: string;
   pct_used: number; metered: boolean; spent_usd: number; budget_usd: number; plan_budget_usd: number;
-  left_usd: number; expires_at?: string | null; used_this_period_usd: number; granted_usd: number; removed_usd: number; used_usd: number;
+  left_usd: number; expires_at?: string | null;
+  dictation?: { available: boolean; words?: number; cost_usd?: number; preview_usd?: number; per_1k_words_usd?: number | null; fair_use_words?: number; over_fair_use?: boolean }; used_this_period_usd: number; granted_usd: number; removed_usd: number; used_usd: number;
   period_start: string | null; period_end: string | null; actions_this_period: number;
   history: { id: string; entry: "grant" | "remove"; usd: number; reason: string | null; by: string; at: string }[];
 };
@@ -410,6 +411,14 @@ function PeriodMeter({ b }: { b: Budget }) {
         <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-lime" />Bonus used {fmt.usd(b.used_this_period_usd, 2)}</span>
         <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-lime/35" />Bonus left {fmt.usd(b.left_usd, 2)}</span>
       </div>
+      {b.dictation?.available ? (
+        <p className={`mt-2 text-[12px] ${b.dictation.over_fair_use ? "text-amber-300" : "text-white/45"}`}>
+          Dictation (our cost, not in their %): {fmt.usd(b.dictation.cost_usd ?? 0, 2)} for {(b.dictation.words ?? 0).toLocaleString()} words
+          {b.dictation.per_1k_words_usd != null ? ` · ${fmt.usd(b.dictation.per_1k_words_usd, 3)} per 1k words` : ""}
+          {b.dictation.preview_usd ? ` · preview ${fmt.usd(b.dictation.preview_usd, 2)}` : ""}
+          {b.dictation.over_fair_use ? ` · over the ${(b.dictation.fair_use_words ?? 0).toLocaleString()}-word fair-use line` : ""}
+        </p>
+      ) : null}
     </div>
   );
 }
