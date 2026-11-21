@@ -191,7 +191,7 @@ function Users() {
             <table className="w-full min-w-[1080px] text-[14px]">
               <thead>
                 <tr className="text-left text-[12px] text-muted">
-                  {["Person", "Plan", "App", "Words (month)", "AI actions (month)", "AI cost (30d)", "Onboarding", "Last active", "Joined", ""].map((h) => (
+                  {["Person", "Plan", "App", "Words (month)", "AI used (period)", "AI cost (30d)", "Onboarding", "Last active", "Joined", ""].map((h) => (
                     <th key={h} className="bg-surface px-5 py-3.5 font-medium first:rounded-tl-[28px] last:rounded-tr-[28px]">{h}</th>
                   ))}
                 </tr>
@@ -215,7 +215,12 @@ function Users() {
                       {u.last_emailed_at ? <span className="mt-1 block text-[11px] text-faint">emailed {fmt.ago(u.last_emailed_at)}</span> : null}
                     </td>
                     <td className="tabular px-5 py-3.5">{fmt.num(u.words_mtd)}</td>
-                    <td className="tabular px-5 py-3.5">{fmt.num(u.actions_mtd)}</td>
+                    <td className="tabular px-5 py-3.5">
+                      {u.ai_pct == null ? <span className="text-faint">–</span> : (
+                        <span className={u.ai_pct >= 100 ? "font-semibold text-red-600" : u.ai_pct >= 80 ? "font-semibold" : ""}>{Math.round(u.ai_pct)}%</span>
+                      )}
+                      <span className="mt-0.5 block text-[11px] text-faint">{fmt.num(u.actions_mtd)} actions</span>
+                    </td>
                     <td className="tabular px-5 py-3.5">{fmt.usd(u.cost_30d_usd, 2)}</td>
                     <td className="px-5 py-3.5">{u.onboarding_completed ? <Pill tone="lime">Done</Pill> : <Pill>Not yet</Pill>}</td>
                     <td className="px-5 py-3.5 text-muted">{fmt.ago(u.last_active_at)}</td>
