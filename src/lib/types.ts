@@ -10,7 +10,7 @@ export type Overview = {
 export type FunnelStep = { step: string; segment: string; users: number; pct: number | null };
 export type UserRow = {
   id: string; email: string; name: string | null; avatar_url: string | null; plan: string; plan_name: string;
-  trial_status: string; trial_ends_at: string | null; words_mtd: number; actions_mtd: number; cost_30d_usd: number;
+  trial_status: string; trial_ends_at: string | null; words_mtd: number; actions_mtd: number; ai_pct: number | null; cost_30d_usd: number;
   onboarding_completed: boolean; last_active_at: string | null; created_at: string | null;
   app_version: string | null; app_version_seen_at: string | null; last_emailed_at: string | null;
 };

@@ -1,6 +1,10 @@
 /** What each cost feature is (llm_usage_events.feature), for the cost pages. */
 export const FEATURES: Record<string, { label: string; what: string }> = {
   command: { label: "Voice questions", what: "Holding ⌥⌘ and asking Lazur: listening, the screen, thinking and the spoken answer (Gemini Live)" },
+  voice_stt: { label: "Voice (new): listening", what: "0.1.14 engine: speech to text for a question (Sarvam)" },
+  voice_brain: { label: "Voice (new): thinking", what: "0.1.14 engine: the brain's answer, tools and whiteboard drawings (Claude)" },
+  voice_tts: { label: "Voice (new): speaking", what: "0.1.14 engine: Lazur's spoken answer (Google Chirp)" },
+  board_sketch: { label: "Whiteboard sketches", what: "Older sketch boards drawn by a model" },
   guide_step: { label: "Step-by-step guides", what: "Each next step of a guide after a click" },
   pointing: { label: "Pointing", what: "Extra vision pass to place a circle exactly on screen" },
   agent_task: { label: "Background jobs", what: "The agent's thinking for multi-step jobs in Chrome and on the Mac" },
