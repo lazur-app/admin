@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AudioLines, BadgeDollarSign, Cpu, Download, Gauge, Globe, LayoutGrid, LogOut, MessageSquareWarning, Radar, ScrollText, Search, Users } from "lucide-react";
+import { AudioLines, BadgeDollarSign, Cpu, Download, Gauge, Globe, LayoutGrid, LogOut, MessageSquareWarning, Radar, ScrollText, Search, Users, UserPlus } from "lucide-react";
 import { api, clearSession, getSession } from "@/lib/api";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/dashboard/users", label: "Users", icon: Users },
+  { href: "/dashboard/waitlist", label: "Waitlist", icon: UserPlus },
   { href: "/dashboard/versions", label: "App versions", icon: Download },
   { href: "/dashboard/revenue", label: "Revenue", icon: BadgeDollarSign },
   { href: "/dashboard/costs", label: "Cost & margin", icon: Cpu },
